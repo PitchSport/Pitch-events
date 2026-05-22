@@ -1428,6 +1428,187 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
 </style>
 
 <script>
+// ================================================================
+// SUPABASE DATABASE LAYER
+// All data syncs across devices in real time
+// ================================================================
+var SB_URL = "https://dkioezovgulwaeweytykg.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRraW9lem92Z3Vsd2Fld2V5dGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTM4ODIsImV4cCI6MjA5NTAyOTg4Mn0.n_a4HgYOw-tmMLZ3Dn3HSjc29VTARXWTatIqRV9OFbQ";
+
+async function sbFetch(table, opts) {
+  opts = opts || {};
+  var url = SB_URL + '/rest/v1/' + table;
+  var params = [];
+  if (opts.select)  params.push('select=' + opts.select);
+  if (opts.eq)      params.push(opts.eq);
+  if (opts.order)   params.push('order=' + opts.order);
+  if (opts.limit)   params.push('limit=' + opts.limit);
+  if (params.length) url += '?' + params.join('&');
+  var headers = {
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'Content-Type': 'application/json',
+    'Prefer': opts.prefer || 'return=representation'
+  };
+  var res = await fetch(url, {
+    method: opts.method || 'GET',
+    headers: headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if (!res.ok) {
+    var txt = await res.text();
+    console.error('Supabase error:', res.status, txt);
+    return null;
+  }
+  var text = await res.text();
+  if (!text) return [];
+  try { return JSON.parse(text); } catch(e) { return []; }
+}
+
+// ── REGISTRATIONS ──────────────────────────────────────────────
+async function dbGetRegs() {
+  return await sbFetch('registrations', {select:'*', order:'created_at.desc'}) || [];
+}
+async function dbSaveReg(reg) {
+  return await sbFetch('registrations', {
+    method:'POST',
+    prefer:'return=representation',
+    body:{
+      id: reg.id,
+      submitted_at: reg.submittedAt,
+      company: reg.company,
+      team: reg.team,
+      contact_person: reg.contactPerson,
+      contact_no: reg.contactNo,
+      email: reg.email,
+      country1: reg.c1||reg.country1||'',
+      country2: reg.c2||reg.country2||'',
+      country3: reg.c3||reg.country3||'',
+      company_logo: reg.companyLogo||'',
+      officials: reg.officials||[],
+      staff_players: reg.staffPlayers||[],
+      non_staff_players: reg.nonStaffPlayers||[],
+      signatory: reg.signatory||'',
+      sig_role: reg.sigRole||'',
+      sig_date: reg.sigDate||'',
+      status: reg.status||'Pending'
+    }
+  });
+}
+async function dbUpdateRegStatus(id, status) {
+  return await sbFetch('registrations?id=eq.'+id, {
+    method:'PATCH', body:{status:status}
+  });
+}
+async function dbDeleteReg(id) {
+  return await sbFetch('registrations?id=eq.'+id, {method:'DELETE'});
+}
+
+// ── MATCHES ────────────────────────────────────────────────────
+async function dbGetMatches() {
+  var rows = await sbFetch('matches', {select:'*', order:'day.asc,time.asc'}) || [];
+  return rows.map(function(r) {
+    return {
+      id:r.id, group:r.grp, round:r.round,
+      home:r.home, hFlag:r.h_flag, hCompany:r.h_company,
+      away:r.away, aFlag:r.a_flag, aCompany:r.a_company,
+      scoreH:r.score_h, scoreA:r.score_a,
+      status:r.status, minute:r.minute,
+      scorers:r.scorers||[],
+      day:r.day, dayLabel:r.day_label,
+      time:r.time, endTime:r.end_time,
+      pitch:r.pitch, duration:r.duration, isKO:r.is_ko
+    };
+  });
+}
+async function dbSaveMatches(matches) {
+  // Upsert all matches
+  var rows = matches.map(function(m) {
+    return {
+      id:m.id, grp:m.group, round:m.round||m.group,
+      home:m.home, h_flag:m.hFlag||'🔵', h_company:m.hCompany||'',
+      away:m.away, a_flag:m.aFlag||'🔴', a_company:m.aCompany||'',
+      score_h:m.scoreH||0, score_a:m.scoreA||0,
+      status:m.status||'upcoming', minute:m.minute||'',
+      scorers:m.scorers||[],
+      day:m.day||1, day_label:m.dayLabel||'Day '+(m.day||1),
+      time:m.time||'', end_time:m.endTime||'',
+      pitch:m.pitch||1, duration:m.duration||14, is_ko:m.isKO||false
+    };
+  });
+  return await sbFetch('matches', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:rows
+  });
+}
+async function dbUpdateMatch(m) {
+  return await sbFetch('matches?id=eq.'+m.id, {
+    method:'PATCH',
+    body:{
+      score_h:m.scoreH||0, score_a:m.scoreA||0,
+      status:m.status||'upcoming', minute:m.minute||'',
+      scorers:m.scorers||[]
+    }
+  });
+}
+async function dbClearMatches() {
+  return await sbFetch('matches?id=gte.0', {method:'DELETE'});
+}
+
+// ── GROUPS ─────────────────────────────────────────────────────
+async function dbGetGroups() {
+  var rows = await sbFetch('groups_data', {select:'*'}) || [];
+  var obj = {};
+  rows.forEach(function(r){ obj[r.group_name] = r.teams; });
+  return obj;
+}
+async function dbSaveGroup(groupName, teams) {
+  return await sbFetch('groups_data', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{group_name:groupName, teams:teams}
+  });
+}
+async function dbClearGroups() {
+  return await sbFetch('groups_data?id=gte.0', {method:'DELETE'});
+}
+
+// ── STATS ──────────────────────────────────────────────────────
+async function dbGetStats() {
+  return await sbFetch('player_stats', {select:'*', order:'goals.desc'}) || [];
+}
+async function dbUpsertStat(stat) {
+  return await sbFetch('player_stats', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{
+      name:stat.name, team:stat.team, flag:stat.flag||'🏳️',
+      goals:stat.goals||0, assists:stat.assists||0,
+      cs:stat.cs||0, save_pct:stat.save||0,
+      jersey:stat.jersey||'', position:stat.position||'', ic:stat.ic||''
+    }
+  });
+}
+
+// ── SETTINGS ───────────────────────────────────────────────────
+async function dbGetSetting(key) {
+  var rows = await sbFetch('settings?key=eq.'+key, {select:'value'}) || [];
+  return rows.length ? rows[0].value : null;
+}
+async function dbSetSetting(key, value) {
+  return await sbFetch('settings', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{key:key, value:value}
+  });
+}
+
+// ── CACHE (keep localStorage as fast read cache) ───────────────
+function cacheSet(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
+function cacheGet(k){ try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;} }
+// ================================================================
+
 
 // ── NEW CLEAN ADMIN AUTH ──────────────────────────────────────
 function openAdmin() {
@@ -2398,7 +2579,8 @@ function generateSchedule() {
     }
   }
 
-  localStorage.setItem('pitchcwc_matches', JSON.stringify(allMatches));
+  cacheSet('pitchcwc_matches', allMatches);
+  dbClearMatches().then(function(){ dbSaveMatches(allMatches); });
   renderFixturesAdmin();
   populateAdminMatchSel();
   toast('Generated '+allMatches.length+' matches — balanced schedule');
@@ -2458,7 +2640,7 @@ function generateKnockoutBracket() {
     koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
   }
 
-  localStorage.setItem('pitchcwc_matches', JSON.stringify([...grpMs,...koMatches]));
+  var combined=[...grpMs,...koMatches]; cacheSet('pitchcwc_matches',combined); dbClearMatches().then(function(){ dbSaveMatches(combined); });
   renderFixturesAdmin();
   populateAdminMatchSel();
   toast('KO bracket added: '+koMatches.length+' matches');
@@ -2471,7 +2653,7 @@ function generateKnockoutBracket() {
 function renderSavedGroupsPreview() {
   var el = document.getElementById('saved-groups-preview');
   if (!el) return;
-  var gs = JSON.parse(localStorage.getItem('pitchcwc_groups')||'{}');
+  var gs = cacheGet('pitchcwc_groups')||{};
   if (!Object.keys(gs).length) { el.innerHTML=''; return; }
   el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">Saved Groups:</div>'
     +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
@@ -2547,7 +2729,7 @@ function addFixture() {
   const homeName = home.replace(/\p{Emoji}/gu,'').trim();
   const awayName = away.replace(/\p{Emoji}/gu,'').trim();
   matches.push({id,group:stage,home:homeName,hFlag,hCompany:hco,away:awayName,aFlag,aCompany:aco,scoreH:0,scoreA:0,status:'upcoming',minute:'',day:parseInt(day),time:formatTime(time)});
-  localStorage.setItem('pitchcwc_matches',JSON.stringify(matches));
+  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
   // Clear fields
   ['fx-home','fx-away','fx-hcompany','fx-acompany'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   renderFixturesAdmin();
@@ -2605,7 +2787,7 @@ function renderFixturesAdmin(){
 
 function deleteFixture(id){
   const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]').filter(m=>m.id!==id);
-  localStorage.setItem('pitchcwc_matches',JSON.stringify(matches));
+  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
   renderFixturesAdmin();
   toast('Match removed');
 }
@@ -2613,6 +2795,7 @@ function deleteFixture(id){
 function clearFixtures(){
   if(!confirm('Clear all fixtures?'))return;
   localStorage.removeItem('pitchcwc_matches');
+  dbClearMatches();
   renderFixturesAdmin();
   toast('All fixtures cleared');
 }
@@ -2640,6 +2823,7 @@ function saveGroup(){
 function clearGroups(){
   if(!confirm('Clear all groups?'))return;
   localStorage.removeItem('pitchcwc_groups');
+  dbClearGroups();
   toast('All groups cleared');
 }
 
@@ -2736,7 +2920,7 @@ function saveScore(){
   m.status = document.getElementById('admin-match-status').value;
   m.minute = document.getElementById('admin-match-minute').value;
   m.scorers = currentScorers.slice();
-  localStorage.setItem('pitchcwc_matches',JSON.stringify(matches));
+  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
 
   // Auto-update stats from scorers
   updateStatsFromScorers(m);
