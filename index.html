@@ -1274,7 +1274,7 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
 
         <!-- STEP 4 — Add Match Manually -->
         <div style="background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
-          <div class="fx-step-label" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleManualAdd()">
+          <div class="fx-step-label" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleManual()">
             Step 4 — Add Match Manually <span id="manual-toggle-icon" style="font-size:18px;color:var(--gold)">▶</span>
           </div>
           <div id="manual-add-section" style="display:none;margin-top:14px">
@@ -1351,7 +1351,7 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
 <!-- ADMIN LOGIN MODAL -->
 <div id="adminModal" class="modal-overlay">
   <div class="modal">
-    <button class="modal-close" onclick="closeAdminModal()">✕</button>
+    <button class="modal-close" onclick="closeAdmin()">✕</button>
     <div class="modal-title">🔒 Staff Login</div>
     <div class="admin-login-notice">Enter your role and password to access the management panel.</div>
     <div style="margin-bottom:12px">
@@ -2130,9 +2130,9 @@ function collectRegistration() {
 function submitRegistration() {
   if (!validateStep(4)) return;
   const reg = collectRegistration();
-  const existing = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  const existing = (cacheGet('pitchcwc_regs')||[]);
   existing.push(reg);
-  localStorage.setItem('pitchcwc_regs', JSON.stringify(existing));
+  cacheSet('pitchcwc_regs', existing);
   dbSaveReg(reg).catch(function(e){ console.error('DB save error:',e); });
   const summary = document.getElementById('reg-summary');
   if (summary) {
@@ -2165,10 +2165,10 @@ function renderRegistrations() {
         signatory:r.signatory, sigRole:r.sig_role, sigDate:r.sig_date, status:r.status
       };
     });
-    localStorage.setItem('pitchcwc_regs', JSON.stringify(regs));
+    cacheSet('pitchcwc_regs', regs);
     _doRenderRegs(regs);
   }).catch(function(){
-    const regs = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]');
+    const regs = (cacheGet('pitchcwc_regs')||[]);
     _doRenderRegs(regs);
   });
 }
@@ -2236,14 +2236,14 @@ function _doRenderRegs(regs) {
 }
 
 function updateRegStatus(id, status) {
-  const regs = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  const regs = (cacheGet('pitchcwc_regs')||[]);
   const reg = regs.find(r => r.id === id);
   if (reg) {
     reg.status = status;
-    localStorage.setItem('pitchcwc_regs', JSON.stringify(regs));
+    cacheSet('pitchcwc_regs', regs);
     // When approved: auto-populate stats with player list
     if(status === 'Approved'){
-      const statsData = JSON.parse(localStorage.getItem('pitchcwc_stats')||'[]');
+      const statsData = (cacheGet('pitchcwc_stats')||[]);
       const allPlayers = [...(reg.staffPlayers||[]).map(p=>({...p,cat:'Staff'})), ...(reg.nonStaffPlayers||[]).map(p=>({...p,cat:'Import'}))];
       allPlayers.forEach(p => {
         const exists = statsData.find(s=>s.ic===p.ic || (s.name===p.name && s.team===reg.team));
@@ -2251,7 +2251,7 @@ function updateRegStatus(id, status) {
           statsData.push({name:p.name, team:reg.team, flag:'🏳️', goals:0, assists:0, cs:0, save:0, jersey:p.jersey||'', position:p.position||'', rating:0, ic:p.ic||''});
         }
       });
-      localStorage.setItem('pitchcwc_stats',JSON.stringify(statsData));
+      cacheSet('pitchcwc_stats', statsData);
       toast('✅ Approved — squad added to stats backend');
     } else {
       toast('Status: ' + status);
@@ -2261,8 +2261,8 @@ function updateRegStatus(id, status) {
 
 function deleteReg(id) {
   if (!confirm('Delete this registration?')) return;
-  const rem = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]').filter(r=>r.id!==id);
-  localStorage.setItem('pitchcwc_regs', JSON.stringify(rem));
+  const rem = (cacheGet('pitchcwc_regs')||[]).filter(r=>r.id!==id);
+  cacheSet('pitchcwc_regs', rem);
   dbDeleteReg(id);
   renderRegistrations();
   toast('Registration deleted');
@@ -2445,7 +2445,7 @@ function generateSchedule() {
   var brk   = parseInt(document.getElementById('fx-break').value||5);
   var cts   = parseInt(document.getElementById('fx-courts').value||2);
   var nDays = parseInt(document.getElementById('fx-num-days').value||3);
-  var groups = JSON.parse(localStorage.getItem('pitchcwc_groups')||'{}');
+  var groups = (cacheGet('pitchcwc_groups')||{});
 
   if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
     toast('Assign teams to groups in Step 3 first','red'); return;
@@ -2619,7 +2619,7 @@ function generateKnockoutBracket() {
   var cts   = parseInt(document.getElementById('fx-courts').value||2);
   var nDays = parseInt(document.getElementById('fx-num-days').value||3);
   var slot  = dur+brk;
-  var existing = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  var existing = (cacheGet('pitchcwc_matches')||[]);
   var grpMs    = existing.filter(function(m){return !m.isKO;});
 
   // Find KO days
@@ -2690,7 +2690,7 @@ function renderSavedGroupsPreview() {
 }
 
 function exportSchedule() {
-  var matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  var matches = (cacheGet('pitchcwc_matches')||[]);
   if (!matches.length) { toast('No schedule','red'); return; }
   var byDay = {};
   matches.forEach(function(m){ var k='Day '+m.day+' \u2014 '+m.dayLabel; if(!byDay[k])byDay[k]=[]; byDay[k].push(m); });
@@ -2707,7 +2707,7 @@ function exportSchedule() {
 function loadRegisteredTeams() {
   var sel = document.getElementById('grp-picker');
   if (!sel) return;
-  var regs = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]');
+  var regs = (cacheGet('pitchcwc_regs')||[]);
   var approved = regs.filter(function(r){return r.status==='Approved';});
   if (!approved.length) { sel.innerHTML='<option value="">No approved teams yet</option>'; return; }
   sel.innerHTML = approved.map(function(r){
@@ -2744,7 +2744,7 @@ function addFixture() {
   const hco = document.getElementById('fx-hcompany').value.trim();
   const aco = document.getElementById('fx-acompany').value.trim();
   if(!home||!away){toast('Enter both team names','red');return;}
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
   const id = Date.now();
   // Parse flag from team name (last char if emoji)
   const hFlag = home.match(/\p{Emoji}/gu) ? home.match(/\p{Emoji}/gu).slice(-1)[0] : '🔵';
@@ -2769,7 +2769,7 @@ function formatTime(t){
 function renderFixturesAdmin(){
   const list = document.getElementById('fixtures-admin-list');
   if(!list)return;
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
   if(matches.length===0){
     list.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">No matches yet. Assign teams to groups and click Auto-Generate.</div>';
     renderSavedGroupsPreview();
@@ -2809,7 +2809,7 @@ function renderFixturesAdmin(){
 }
 
 function deleteFixture(id){
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]').filter(m=>m.id!==id);
+  const matches = (cacheGet('pitchcwc_matches')||[]).filter(m=>m.id!==id);
   cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
   renderFixturesAdmin();
   toast('Match removed');
@@ -2835,9 +2835,9 @@ function saveGroup(){
     const name = t.replace(/\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu,'').trim();
     return { pos:i+1, name, flag, company:'', p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0, qualify:i<2 };
   });
-  const groups = JSON.parse(localStorage.getItem('pitchcwc_groups')||'{}');
+  const groups = (cacheGet('pitchcwc_groups')||{});
   groups[grpName] = teamList;
-  localStorage.setItem('pitchcwc_groups',JSON.stringify(groups));
+  cacheSet('pitchcwc_groups', groups);
   renderSavedGroupsPreview();
   updateEstimatedDuration();
   toast('✅ ' + grpName + ' saved — ' + teamList.length + ' teams');
@@ -2875,7 +2875,7 @@ function adminTab(n){
 function populateAdminMatchSel(){
   const sel = document.getElementById('admin-match-sel');
   if(!sel) return;
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
   if(matches.length===0){
     sel.innerHTML='<option>No matches added yet — use Fixtures tab to add matches</option>';
     return;
@@ -2887,7 +2887,7 @@ function populateAdminMatchSel(){
 function loadMatchForEdit(){
   const sel = document.getElementById('admin-match-sel');
   if(!sel) return;
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
   const m = matches.find(x=>x.id===parseInt(sel.value));
   if(!m) return;
   document.getElementById('admin-home-name').textContent = m.home;
@@ -2935,7 +2935,7 @@ function removeScorer(i){
 function saveScore(){
   if(!adminLoggedIn){toast('Not authorised','red');return;}
   const sel = document.getElementById('admin-match-sel');
-  const matches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
   const m = matches.find(x=>x.id===parseInt(sel.value));
   if(!m){toast('No match selected','red');return;}
   m.scoreH = parseInt(document.getElementById('admin-score-h').value)||0;
@@ -2955,7 +2955,7 @@ function saveScore(){
 
 function updateStatsFromScorers(match){
   if(!match.scorers||!match.scorers.length) return;
-  const statsData = JSON.parse(localStorage.getItem('pitchcwc_stats')||'[]');
+  const statsData = (cacheGet('pitchcwc_stats')||[]);
   match.scorers.forEach(s=>{
     if(s.type==='Own Goal') return; // own goals don't count for scorer
     const teamName = s.team==='home' ? match.home : match.away;
@@ -2963,7 +2963,7 @@ function updateStatsFromScorers(match){
     if(existing){ existing.goals = (existing.goals||0)+1; }
     else { statsData.push({name:s.name, team:teamName, flag:'⚽', goals:1, assists:0, cs:0, save:0, rating:1}); }
   });
-  localStorage.setItem('pitchcwc_stats',JSON.stringify(statsData));
+  cacheSet('pitchcwc_stats', statsData);
 }
 
 function saveStat(){
@@ -2976,16 +2976,16 @@ function saveStat(){
   const save=parseInt(document.getElementById('stat-save').value)||0;
   const flag=document.getElementById('stat-flag').value||'🏴';
   if(!name||!team){toast('Enter player name and team','red');return;}
-  const statsData=JSON.parse(localStorage.getItem('pitchcwc_stats')||'[]');
+  const statsData=(cacheGet('pitchcwc_stats')||[]);
   const existing=statsData.find(s=>s.name===name);
   if(existing){existing.goals=goals;existing.assists=assists;existing.flag=flag;}
   else{statsData.push({name,team,flag,goals,assists,cs:0,save:0,rating:goals+assists});}
-  localStorage.setItem('pitchcwc_stats',JSON.stringify(statsData));
+  cacheSet('pitchcwc_stats', statsData);
   if(cs>0||save>0){
-    const keepersData=JSON.parse(localStorage.getItem('pitchcwc_keepers')||'[]');
+    const keepersData=(cacheGet('pitchcwc_keepers')||[]);
     const gk=keepersData.find(k=>k.name===name);
     if(gk){gk.cs=cs;gk.save=save;}else{keepersData.push({name,team,flag,cs,save});}
-    localStorage.setItem('pitchcwc_keepers',JSON.stringify(keepersData));
+    cacheSet('pitchcwc_keepers', keepersData);
   }
   toast('Stats updated for '+name);
 }
@@ -3108,7 +3108,7 @@ function renderLive(){
   }
 
   // Load matches from localStorage (set by admin)
-  const allMatches = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const allMatches = (cacheGet('pitchcwc_matches')||[]);
   const liveNow  = allMatches.filter(m=>m.status==='live');
   const results  = allMatches.filter(m=>m.status==='ft');
   const upcoming = allMatches.filter(m=>m.status==='upcoming');
@@ -3148,7 +3148,7 @@ function renderLive(){
 function renderFixtures(filter='all'){
   const grid = document.getElementById('fixturesGrid');
   if(!grid) return;
-  const allM = JSON.parse(localStorage.getItem('pitchcwc_matches')||'[]');
+  const allM = (cacheGet('pitchcwc_matches')||[]);
   const filtered = filter==='all'?allM:allM.filter(m=>m.group===filter);
   if(filtered.length===0){
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">📅</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Fixtures Coming Soon</div><div style="font-size:14px;color:var(--muted)">Match fixtures will appear here once the organiser sets up the schedule.</div></div>';
@@ -3166,7 +3166,7 @@ function filterFixtures(f,btn){
 function renderStandings(){
   const grid = document.getElementById('standingsGrid');
   if(!grid) return;
-  const savedGroups = JSON.parse(localStorage.getItem('pitchcwc_groups')||'null');
+  const savedGroups = (cacheGet('pitchcwc_groups')||null);
   if(!savedGroups||Object.keys(savedGroups).length===0){
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">🏆</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Standings Coming Soon</div><div style="font-size:14px;color:var(--muted)">Group standings will appear once teams are assigned and matches begin.</div></div>';
     return;
@@ -3187,8 +3187,8 @@ function renderStandings(){
 }
 
 function renderStats(){
-  const statsData = JSON.parse(localStorage.getItem('pitchcwc_stats')||'[]');
-  const keepersData = JSON.parse(localStorage.getItem('pitchcwc_keepers')||'[]');
+  const statsData = (cacheGet('pitchcwc_stats')||[]);
+  const keepersData = (cacheGet('pitchcwc_keepers')||[]);
   if(statsData.length===0){
     const emptyHtml = '<div style="text-align:center;padding:48px 16px"><div style="font-size:36px;margin-bottom:10px">📊</div><div style="font-family:Barlow Condensed,sans-serif;font-size:20px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:6px">Stats Coming Soon</div><div style="font-size:13px;color:var(--muted)">Player statistics will appear once matches are played.</div></div>';
     ['topScorers','bestPlayers','bestGK'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=emptyHtml;});
@@ -3225,7 +3225,7 @@ function renderStats(){
 function renderTeams(){
   const grid = document.getElementById('teamsGrid');
   if(!grid) return;
-  const regs = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]');
+  const regs = (cacheGet('pitchcwc_regs')||[]);
   const approved = regs.filter(r=>r.status==='Approved');
   if(approved.length===0){
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">👕</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Teams Coming Soon</div><div style="font-size:14px;color:var(--muted)">Approved registered teams will appear here.</div></div>';
@@ -3300,6 +3300,35 @@ function recalcEst(){ fxCalc(); }
 function updateEstimatedDuration(){ fxCalc(); }
 function onFormatChange(){ fxFormatChange(); }
 function updateGroupStageOptions(){ fxFormatChange(); }
+
+
+function changeAdminPw() {
+  var old = document.getElementById('s-old') || document.getElementById('s-old-admin');
+  var nw  = document.getElementById('s-new') || document.getElementById('s-new-admin');
+  var cf  = document.getElementById('s-confirm') || document.getElementById('s-confirm-admin');
+  if (!old||!nw||!cf) { toast('Settings fields not found','red'); return; }
+  var aPw = localStorage.getItem('pitchcwc_admin_pw') || 'pitch2026';
+  if (old.value !== aPw) { toast('Current password incorrect','red'); return; }
+  if (!nw.value || nw.value.length < 6) { toast('New password must be at least 6 chars','red'); return; }
+  if (nw.value !== cf.value) { toast('Passwords do not match','red'); return; }
+  localStorage.setItem('pitchcwc_admin_pw', nw.value);
+  old.value=''; nw.value=''; cf.value='';
+  toast('Admin password updated');
+}
+function changeOffPw() {
+  if (currentRole !== 'admin') { toast('Only admin can change official password','red'); return; }
+  var v   = document.getElementById('s-verify') || document.getElementById('s-admin-verify');
+  var nw  = document.getElementById('s-off-new') || document.getElementById('s-new-official');
+  var cf  = document.getElementById('s-off-confirm') || document.getElementById('s-confirm-official');
+  if (!v||!nw||!cf) { toast('Settings fields not found','red'); return; }
+  var aPw = localStorage.getItem('pitchcwc_admin_pw') || 'pitch2026';
+  if (v.value !== aPw) { toast('Admin password incorrect','red'); return; }
+  if (!nw.value || nw.value.length < 6) { toast('Password must be at least 6 chars','red'); return; }
+  if (nw.value !== cf.value) { toast('Passwords do not match','red'); return; }
+  localStorage.setItem('pitchcwc_official_pw', nw.value);
+  v.value=''; nw.value=''; cf.value='';
+  toast('Officials password updated');
+}
 
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.style.display='none');
