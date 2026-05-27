@@ -2133,6 +2133,7 @@ function submitRegistration() {
   const existing = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
   existing.push(reg);
   localStorage.setItem('pitchcwc_regs', JSON.stringify(existing));
+  dbSaveReg(reg).catch(function(e){ console.error('DB save error:',e); });
   const summary = document.getElementById('reg-summary');
   if (summary) {
     const rows = [
@@ -2152,7 +2153,27 @@ function submitRegistration() {
 
 // ===== ADMIN: REGISTRATIONS =====
 function renderRegistrations() {
-  const regs = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  // Pull from Supabase so registrations from ALL devices appear
+  dbGetRegs().then(function(rows) {
+    const regs = rows.map(function(r) {
+      return {
+        id:r.id, submittedAt:r.submitted_at, company:r.company, team:r.team,
+        contactPerson:r.contact_person, contactNo:r.contact_no, email:r.email,
+        country1:r.country1, c1:r.country1, country2:r.country2, country3:r.country3,
+        companyLogo:r.company_logo, officials:r.officials||[],
+        staffPlayers:r.staff_players||[], nonStaffPlayers:r.non_staff_players||[],
+        signatory:r.signatory, sigRole:r.sig_role, sigDate:r.sig_date, status:r.status
+      };
+    });
+    localStorage.setItem('pitchcwc_regs', JSON.stringify(regs));
+    _doRenderRegs(regs);
+  }).catch(function(){
+    const regs = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]');
+    _doRenderRegs(regs);
+  });
+}
+function _doRenderRegs(regs) {
+  
   const list = document.getElementById('registrations-list');
   const count = document.getElementById('reg-count');
   if (count) count.textContent = regs.length;
@@ -2240,7 +2261,9 @@ function updateRegStatus(id, status) {
 
 function deleteReg(id) {
   if (!confirm('Delete this registration?')) return;
-  localStorage.setItem('pitchcwc_regs', JSON.stringify(JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]').filter(r=>r.id!==id)));
+  const rem = JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]').filter(r=>r.id!==id);
+  localStorage.setItem('pitchcwc_regs', JSON.stringify(rem));
+  dbDeleteReg(id);
   renderRegistrations();
   toast('Registration deleted');
 }
