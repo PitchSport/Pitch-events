@@ -801,6 +801,7 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
       <button class="admin-tab" id="atab4" onclick="adminTab(4)">📢 Announce</button>
     <button class="admin-tab" id="atab5" onclick="adminTab(5)">🗓️ Fixtures</button>
     <button class="admin-tab" id="atab6" onclick="adminTab(6)" id="tab-settings-btn">⚙️ Settings</button>
+    <button class="admin-tab" id="atab7" onclick="adminTab(7)">🎲 Draw</button>
     </div>
 
     <!-- TAB 1: SCORES -->
@@ -1712,7 +1713,7 @@ function doLogin() {
     adminLoggedIn=true; currentRole="official";
     closeAdmin(); showPage("admin");
     var rb2=document.getElementById("admin-role-badge"); if(rb2) rb2.textContent="Match Official";
-    ["atab3","atab4","atab5","atab6"].forEach(function(id){ var t=document.getElementById(id); if(t) t.style.display="none"; });
+    ["atab3","atab4","atab5","atab6","atab7"].forEach(function(id){ var t=document.getElementById(id); if(t) t.style.display="none"; });
     adminTab(1);
     toast("Logged in as Match Official");
   } else {
