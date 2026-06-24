@@ -1199,6 +1199,255 @@ id="atab-content6" style="display:none;margin-top:24px">
 var SB_URL = 'https://dkioezovgulwaeweytkg.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRraW9lem92Z3Vsd2Fld2V5dGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTM4ODIsImV4cCI6MjA5NTAyOTg4Mn0.n_a4HgYOw-tmMLZ3Dn3HSjc29VTARXWTatIqRV9OFbQ';
 
+// ================================================================
+// SUPABASE DATABASE LAYER
+// All data syncs across devices in real time
+// ================================================================
+var SB_URL = "https://dkioezovgulwaeweytkg.supabase.co";
+var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRraW9lem92Z3Vsd2Fld2V5dGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTM4ODIsImV4cCI6MjA5NTAyOTg4Mn0.n_a4HgYOw-tmMLZ3Dn3HSjc29VTARXWTatIqRV9OFbQ";
+
+function sbFetch(table, opts) {
+  opts = opts || {};
+  return new Promise(function(resolve, reject) {
+    var url = SB_URL + '/rest/v1/' + table;
+    var params = [];
+    if (opts.select) params.push('select=' + encodeURIComponent(opts.select));
+    if (opts.eq)     params.push(opts.eq);
+    if (opts.order)  params.push('order=' + opts.order);
+    if (opts.limit)  params.push('limit=' + opts.limit);
+    if (params.length) url += '?' + params.join('&');
+
+    var method = (opts.method || 'GET').toUpperCase();
+    var xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.setRequestHeader('apikey', SB_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + SB_KEY);
+    if (method !== 'GET' && method !== 'DELETE') {
+      xhr.setRequestHeader('Content-Type', 'application/json');
+    }
+    if (opts.prefer) {
+      xhr.setRequestHeader('Prefer', opts.prefer);
+    } else if (method === 'POST') {
+      xhr.setRequestHeader('Prefer', 'return=representation,resolution=merge-duplicates');
+    } else if (method === 'PATCH') {
+      xhr.setRequestHeader('Prefer', 'return=representation');
+    }
+
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var text = xhr.responseText;
+        if (!text || text === '') { resolve(method === 'GET' ? [] : {}); return; }
+        try { resolve(JSON.parse(text)); } catch(e) { resolve([]); }
+      } else {
+        console.error('Supabase error:', xhr.status, xhr.responseText.slice(0,200));
+        resolve(null);
+      }
+    };
+    xhr.onerror = function() {
+      reject(new Error('Network error — could not reach Supabase'));
+    };
+    xhr.ontimeout = function() {
+      reject(new Error('Request timed out'));
+    };
+    xhr.timeout = 10000;
+    xhr.send(opts.body ? JSON.stringify(opts.body) : null);
+  });
+}
+
+// ── REGISTRATIONS ──────────────────────────────────────────────
+async function dbGetRegs() {
+  return await sbFetch('registrations', {select:'*', order:'created_at.desc', limit:'100'}) || [];
+}
+async function dbSaveReg(reg) {
+  return await sbFetch('registrations', {
+    method:'POST',
+    prefer:'return=representation',
+    body:{
+      id: reg.id,
+      submitted_at: reg.submittedAt,
+      company: reg.company,
+      team: reg.team,
+      contact_person: reg.contactPerson,
+      contact_no: reg.contactNo,
+      email: reg.email,
+      country1: reg.c1||reg.country1||'',
+      country2: reg.c2||reg.country2||'',
+      country3: reg.c3||reg.country3||'',
+      company_logo: reg.companyLogo||'',
+      officials: reg.officials||[],
+      staff_players: reg.staffPlayers||[],
+      non_staff_players: reg.nonStaffPlayers||[],
+      signatory: reg.signatory||'',
+      sig_role: reg.sigRole||'',
+      sig_date: reg.sigDate||'',
+      status: reg.status||'Pending'
+    }
+  });
+}
+async function dbUpdateRegStatus(id, status) {
+  return await sbFetch('registrations?id=eq.'+id, {
+    method:'PATCH', body:{status:status}
+  });
+}
+async function dbDeleteReg(id) {
+  return await sbFetch('registrations?id=eq.'+id, {method:'DELETE'});
+}
+
+// ── MATCHES ────────────────────────────────────────────────────
+async function dbGetMatches() {
+  var rows = await sbFetch('matches', {select:'*', order:'day.asc,time.asc'}) || [];
+  return rows.map(function(r) {
+    return {
+      id:r.id, group:r.grp, round:r.round,
+      home:r.home, hFlag:r.h_flag, hCompany:r.h_company,
+      away:r.away, aFlag:r.a_flag, aCompany:r.a_company,
+      scoreH:r.score_h, scoreA:r.score_a,
+      status:r.status, minute:r.minute,
+      scorers:r.scorers||[],
+      day:r.day, dayLabel:r.day_label,
+      time:r.time, endTime:r.end_time,
+      pitch:r.pitch, duration:r.duration, isKO:r.is_ko
+    };
+  });
+}
+async function dbSaveMatches(matches) {
+  // Upsert all matches
+  var rows = matches.map(function(m) {
+    return {
+      id:m.id, grp:m.group, round:m.round||m.group,
+      home:m.home, h_flag:m.hFlag||'🔵', h_company:m.hCompany||'',
+      away:m.away, a_flag:m.aFlag||'🔴', a_company:m.aCompany||'',
+      score_h:m.scoreH||0, score_a:m.scoreA||0,
+      status:m.status||'upcoming', minute:m.minute||'',
+      scorers:m.scorers||[],
+      day:m.day||1, day_label:m.dayLabel||'Day '+(m.day||1),
+      time:m.time||'', end_time:m.endTime||'',
+      pitch:m.pitch||1, duration:m.duration||14, is_ko:m.isKO||false
+    };
+  });
+  return await sbFetch('matches', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:rows
+  });
+}
+async function dbUpdateMatch(m) {
+  return await sbFetch('matches?id=eq.'+m.id, {
+    method:'PATCH',
+    body:{
+      score_h:m.scoreH||0, score_a:m.scoreA||0,
+      status:m.status||'upcoming', minute:m.minute||'',
+      scorers:m.scorers||[]
+    }
+  });
+}
+async function dbClearMatches() {
+  return await sbFetch('matches?id=gte.0', {method:'DELETE'});
+}
+
+// ── GROUPS ─────────────────────────────────────────────────────
+async function dbGetGroups() {
+  var rows = await sbFetch('groups_data', {select:'*'}) || [];
+  var obj = {};
+  rows.forEach(function(r){ obj[r.group_name] = r.teams; });
+  return obj;
+}
+async function dbSaveGroup(groupName, teams) {
+  return await sbFetch('groups_data', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{group_name:groupName, teams:teams}
+  });
+}
+async function dbClearGroups() {
+  return await sbFetch('groups_data?id=gte.0', {method:'DELETE'});
+}
+
+// ── STATS ──────────────────────────────────────────────────────
+async function dbGetStats() {
+  return await sbFetch('player_stats', {select:'*', order:'goals.desc'}) || [];
+}
+async function dbUpsertStat(stat) {
+  return await sbFetch('player_stats', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{
+      name:stat.name, team:stat.team, flag:stat.flag||'🏳️',
+      goals:stat.goals||0, assists:stat.assists||0,
+      cs:stat.cs||0, save_pct:stat.save||0,
+      jersey:stat.jersey||'', position:stat.position||'', ic:stat.ic||''
+    }
+  });
+}
+
+// ── SETTINGS ───────────────────────────────────────────────────
+async function dbGetSetting(key) {
+  var rows = await sbFetch('settings?key=eq.'+key, {select:'value'}) || [];
+  return rows.length ? rows[0].value : null;
+}
+async function dbSetSetting(key, value) {
+  return await sbFetch('settings', {
+    method:'POST',
+    prefer:'resolution=merge-duplicates,return=representation',
+    body:{key:key, value:value}
+  });
+}
+
+// ── CACHE (keep localStorage as fast read cache) ───────────────
+function cacheSet(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
+function cacheGet(k){ try{var v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch(e){return null;} }
+// ================================================================
+
+
+// ── NEW CLEAN ADMIN AUTH ──────────────────────────────────────
+function openAdmin() {
+  document.getElementById("admin-popup").classList.add("show");
+  setTimeout(function(){ var pw=document.getElementById("ap-pw"); if(pw) pw.focus(); }, 100);
+}
+function closeAdmin() {
+  document.getElementById("admin-popup").classList.remove("show");
+  var pw=document.getElementById("ap-pw"); if(pw) pw.value="";
+  var err=document.getElementById("ap-err"); if(err) err.style.display="none";
+}
+function doLogin() {
+  var pw   = document.getElementById("ap-pw").value;
+  var role = document.getElementById("ap-role").value;
+  var err  = document.getElementById("ap-err");
+  var aPw  = localStorage.getItem("pitchcwc_admin_pw") || "pitch2026";
+  var oPw  = localStorage.getItem("pitchcwc_official_pw") || "official2026";
+  if (role==="admin" && pw===aPw) {
+    adminLoggedIn=true; currentRole="admin";
+    localStorage.setItem('pitchcwc_role','admin');
+    closeAdmin();
+    showPage("admin");
+    if(typeof initScoresTab==='function') initScoresTab();
+    if(typeof updateNavForLogin==='function') updateNavForLogin();
+    var rb=document.getElementById("admin-role-badge"); if(rb) rb.textContent="Admin";
+    toast("Logged in as Admin");
+  } else if (role==="official" && pw===oPw) {
+    adminLoggedIn=true; currentRole="official";
+    localStorage.setItem('pitchcwc_role','official');
+    closeAdmin();
+    showPage("admin");
+    if(typeof initScoresTab==='function') initScoresTab();
+    if(typeof updateNavForLogin==='function') updateNavForLogin();
+    var rb2=document.getElementById("admin-role-badge"); if(rb2) rb2.textContent="Match Official";
+    ["atab3","atab4","atab5","atab6","atab7"].forEach(function(id){ var t=document.getElementById(id); if(t) t.style.display="none"; });
+    adminTab(1);
+    toast("Logged in as Match Official");
+  } else {
+    if(err) err.style.display="block";
+    var pwEl=document.getElementById("ap-pw"); if(pwEl){pwEl.value=""; pwEl.focus();}
+  }
+}
+document.addEventListener("DOMContentLoaded", function(){
+  var popup=document.getElementById("admin-popup");
+  if(popup) popup.addEventListener("click", function(e){ if(e.target===this) closeAdmin(); });
+  var pw=document.getElementById("ap-pw");
+  if(pw) pw.addEventListener("keydown", function(e){ if(e.key==="Enter") doLogin(); });
+});
+// ── END NEW ADMIN AUTH ────────────────────────────────────────
+
 // ===== REGISTRATION FORM =====
 let currentStep = 1;
 let staffCount = 0;
@@ -1206,19 +1455,58 @@ let nonStaffCount = 0;
 let officialCount = 0;
 
 const FIFA_COUNTRIES = [
-  '🇦🇷 Argentina','🇦🇺 Australia','🇦🇹 Austria','🇧🇪 Belgium','🇧🇴 Bolivia',
-  '🇧🇷 Brazil','🇨🇦 Canada','🇨🇱 Chile','🇨🇳 China','🇨🇴 Colombia',
-  '🇨🇷 Costa Rica','🇭🇷 Croatia','🇨🇿 Czech Republic','🇩🇰 Denmark','🇪🇨 Ecuador',
-  '🇪🇬 Egypt','🇬🇭 Ghana','🇩🇪 Germany','🏴󠁧󠁢󠁥󠁮󠁧󠁿 England','🇬🇷 Greece',
-  '🇮🇳 India','🇮🇩 Indonesia','🇮🇷 Iran','🇮🇶 Iraq','🇯🇵 Japan',
-  '🇲🇽 Mexico','🇲🇦 Morocco','🇳🇱 Netherlands','🇳🇿 New Zealand','🇳🇬 Nigeria',
-  '🇵🇦 Panama','🇵🇾 Paraguay','🇵🇪 Peru','🇵🇹 Portugal','🇷🇴 Romania',
-  '🇸🇦 Saudi Arabia','🇷🇸 Serbia','🇸🇰 Slovakia','🇰🇷 South Korea','🇪🇸 Spain',
-  '🇨🇭 Switzerland','🇹🇳 Tunisia','🇹🇷 Turkey','🇺🇦 Ukraine','🇺🇾 Uruguay',
-  '🇺🇸 USA','🇻🇪 Venezuela','🏴󠁧󠁢󠁷󠁬󠁳󠁿 Wales','🇿🇦 South Africa'
+  '🇩🇿 Algeria',
+  '🇦🇷 Argentina',
+  '🇦🇺 Australia',
+  '🇦🇹 Austria',
+  '🇧🇪 Belgium',
+  '🇧🇷 Brazil',
+  '🇨🇲 Cameroon',
+  '🇨🇦 Canada',
+  '🇨🇴 Colombia',
+  '🇨🇷 Costa Rica',
+  '🇨🇮 Cote dIvoire',
+  '🇩🇰 Denmark',
+  '🇪🇨 Ecuador',
+  '🇪🇬 Egypt',
+  '🏴󠁧󠁢󠁥󠁮󠁧󠁿 England',
+  '🇫🇷 France',
+  '🇩🇪 Germany',
+  '🇬🇷 Greece',
+  '🇭🇳 Honduras',
+  '🇮🇷 Iran',
+  '🇮🇶 Iraq',
+  '🇮🇹 Italy',
+  '🇯🇲 Jamaica',
+  '🇯🇵 Japan',
+  '🇯🇴 Jordan',
+  '🇲🇽 Mexico',
+  '🇲🇦 Morocco',
+  '🇳🇱 Netherlands',
+  '🇳🇿 New Zealand',
+  '🇳🇬 Nigeria',
+  '🇵🇦 Panama',
+  '🇵🇱 Poland',
+  '🇵🇹 Portugal',
+  '🇸🇦 Saudi Arabia',
+  '🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland',
+  '🇸🇳 Senegal',
+  '🇷🇸 Serbia',
+  '🇸🇰 Slovakia',
+  '🇿🇦 South Africa',
+  '🇰🇷 South Korea',
+  '🇪🇸 Spain',
+  '🇨🇭 Switzerland',
+  '🇹🇳 Tunisia',
+  '🇹🇷 Turkey',
+  '🇺🇦 Ukraine',
+  '🇺🇸 United States',
+  '🇺🇾 Uruguay',
+  '🇺🇿 Uzbekistan',
+  '🇻🇪 Venezuela'
 ];
 
-const JERSEY_SIZES = ['XS','S','M','L','XL','2XL','3XL'];
+const JERSEY_SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 const EMPLOYMENT_DOCS = ['Employment Letter','SPK (Surat Perlantikan Kakitangan)','TAP & SCP Copy','Salary Slip (min 1 month)','Foreign Workers License','Other'];
 const OFFICIAL_POSITIONS = ['Team Manager','Head Coach','Assistant Coach','Goalkeeper Coach','Physio / Medical Officer','Team Secretary','Other'];
 
@@ -1323,7 +1611,17 @@ function addStaffPlayer() {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Jersey Size *</label>
+        <label class="form-label">Jersey Number *</label>
+        <input type="number" class="form-input" id="sp-jersey-${n}" min="1" max="99" placeholder="e.g. 10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nationality</label>
+        <input class="form-input" id="sp-nat-${n}" placeholder="e.g. Brunei">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">Jersey Size * <span onclick="document.getElementById('size-chart-modal').classList.add('open')" style="font-size:10px;color:var(--gold);cursor:pointer;font-weight:700;text-decoration:underline">View Size Chart</span></label>
         <select class="form-select" id="sp-size-${n}">
           <option value="">Select size</option>
           ${JERSEY_SIZES.map(s=>`<option>${s}</option>`).join('')}
@@ -1339,12 +1637,14 @@ function addStaffPlayer() {
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label class="form-label">Proof of Employment *</label>
-      <select class="form-select" id="sp-doc-${n}" style="margin-bottom:8px">
+      <select class="form-select" id="sp-doc-${n}" style="margin-bottom:8px" onchange="toggleDocUpload('sp-upload-wrap-${n}',this.value)">
         <option value="">Select document type to be submitted</option>
         ${EMPLOYMENT_DOCS.map(d=>`<option>${d}</option>`).join('')}
       </select>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">
-        📎 Physical copy of selected document must be submitted to the organiser before the tournament.
+      <div id="sp-upload-wrap-${n}" style="display:none;margin-top:8px">
+        <label style="display:block;font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Upload Document *</label>
+        <input type="file" id="sp-upload-${n}" accept=".pdf,.jpg,.jpeg,.png" style="width:100%;padding:9px;background:var(--panel2);border:1px dashed rgba(197,162,39,.35);border-radius:6px;color:var(--muted);font-size:12px;cursor:pointer">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">📎 Accepted: PDF, JPG, PNG (max 5MB). Physical copy also required on tournament day.</div>
       </div>
     </div>`;
   c.appendChild(div);
@@ -1386,7 +1686,17 @@ function addNonStaffPlayer() {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Jersey Size *</label>
+        <label class="form-label">Jersey Number *</label>
+        <input type="number" class="form-input" id="nsp-jersey-${n}" min="1" max="99" placeholder="e.g. 7">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nationality</label>
+        <input class="form-input" id="nsp-nat-${n}" placeholder="e.g. Brunei">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" style="display:flex;align-items:center;justify-content:space-between">Jersey Size * <span onclick="document.getElementById('size-chart-modal').classList.add('open')" style="font-size:10px;color:var(--gold);cursor:pointer;font-weight:700;text-decoration:underline">View Size Chart</span></label>
         <select class="form-select" id="nsp-size-${n}">
           <option value="">Select size</option>
           ${JERSEY_SIZES.map(s=>`<option>${s}</option>`).join('')}
@@ -1599,6 +1909,7 @@ function collectRegistration() {
       name: document.getElementById('sp-name-' + n)?.value || '',
       age: document.getElementById('sp-age-' + n)?.value || '',
       ic: document.getElementById('sp-ic-' + n)?.value || '',
+      jersey: document.getElementById('sp-jersey-' + n)?.value || '',
       size: document.getElementById('sp-size-' + n)?.value || '',
       position: document.getElementById('sp-pos-' + n)?.value || '',
       doc: document.getElementById('sp-doc-' + n)?.value || '',
@@ -1612,6 +1923,7 @@ function collectRegistration() {
       name: document.getElementById('nsp-name-' + n)?.value || '',
       age: document.getElementById('nsp-age-' + n)?.value || '',
       ic: document.getElementById('nsp-ic-' + n)?.value || '',
+      jersey: document.getElementById('nsp-jersey-' + n)?.value || '',
       size: document.getElementById('nsp-size-' + n)?.value || '',
       position: document.getElementById('nsp-pos-' + n)?.value || '',
       playsForClub: clubQ,
@@ -1646,6 +1958,7 @@ function collectRegistration() {
     signatory: document.getElementById('f-sig-name')?.value || '',
     sigRole: document.getElementById('f-sig-role')?.value || '',
     sigDate: document.getElementById('f-sig-date')?.value || '',
+    companyLogo: document.getElementById('logo-preview-img')?.src || '',
     status: 'Pending',
   };
 }
@@ -1653,9 +1966,10 @@ function collectRegistration() {
 function submitRegistration() {
   if (!validateStep(4)) return;
   const reg = collectRegistration();
-  const existing = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  const existing = (cacheGet('pitchcwc_regs')||[]);
   existing.push(reg);
-  localStorage.setItem('pitchcwc_regs', JSON.stringify(existing));
+  cacheSet('pitchcwc_regs', existing);
+  dbSaveReg(reg).catch(function(e){ console.error('DB save error:',e); });
   const summary = document.getElementById('reg-summary');
   if (summary) {
     const rows = [
@@ -1675,7 +1989,34 @@ function submitRegistration() {
 
 // ===== ADMIN: REGISTRATIONS =====
 function renderRegistrations() {
-  const regs = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  // Show loading state
+  var list = document.getElementById('registrations-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:28px;color:var(--muted)"><div style="font-size:24px;margin-bottom:8px">⏳</div>Loading registrations from database...</div>';
+  // Pull from Supabase so registrations from ALL devices appear
+  dbGetRegs().then(function(rows) {
+    const regs = rows.map(function(r) {
+      return {
+        id:r.id, submittedAt:r.submitted_at, company:r.company, team:r.team,
+        contactPerson:r.contact_person, contactNo:r.contact_no, email:r.email,
+        country1:r.country1, c1:r.country1, country2:r.country2, country3:r.country3,
+        companyLogo:r.company_logo, officials:r.officials||[],
+        staffPlayers:r.staff_players||[], nonStaffPlayers:r.non_staff_players||[],
+        signatory:r.signatory, sigRole:r.sig_role, sigDate:r.sig_date, status:r.status
+      };
+    });
+    cacheSet('pitchcwc_regs', regs);
+    _doRenderRegs(regs);
+  }).catch(function(err){
+    console.error('Supabase error:', err);
+    const list = document.getElementById('registrations-list');
+    if (list) list.innerHTML = '<div style="text-align:center;padding:28px;color:#E74C3C"><div style="font-size:28px;margin-bottom:10px">⚠️</div><strong>Could not connect to database.</strong><br><span style="font-size:13px;color:var(--muted)">Check your internet connection and try again.<br>Error: ' + (err && err.message ? err.message : 'Network error') + '</span><br><br><button class="btn-save" onclick="renderRegistrations()" style="width:auto;padding:8px 20px;font-size:14px">↻ Retry</button></div>';
+    // Still try cache as fallback
+    const regs = (cacheGet('pitchcwc_regs')||[]);
+    if (regs.length) _doRenderRegs(regs);
+  });
+}
+function _doRenderRegs(regs) {
+  
   const list = document.getElementById('registrations-list');
   const count = document.getElementById('reg-count');
   if (count) count.textContent = regs.length;
@@ -1738,14 +2079,35 @@ function renderRegistrations() {
 }
 
 function updateRegStatus(id, status) {
-  const regs = JSON.parse(localStorage.getItem('pitchcwc_regs') || '[]');
+  const regs = (cacheGet('pitchcwc_regs')||[]);
   const reg = regs.find(r => r.id === id);
-  if (reg) { reg.status = status; localStorage.setItem('pitchcwc_regs', JSON.stringify(regs)); toast('✅ Status: ' + status); }
+  if (reg) {
+    reg.status = status;
+    cacheSet('pitchcwc_regs', regs);
+    dbUpdateRegStatus(id, status);
+    // When approved: auto-populate stats with player list
+    if(status === 'Approved'){
+      const statsData = (cacheGet('pitchcwc_stats')||[]);
+      const allPlayers = [...(reg.staffPlayers||[]).map(p=>({...p,cat:'Staff'})), ...(reg.nonStaffPlayers||[]).map(p=>({...p,cat:'Import'}))];
+      allPlayers.forEach(p => {
+        const exists = statsData.find(s=>s.ic===p.ic || (s.name===p.name && s.team===reg.team));
+        if(!exists){
+          statsData.push({name:p.name, team:reg.team, flag:'🏳️', goals:0, assists:0, cs:0, save:0, jersey:p.jersey||'', position:p.position||'', rating:0, ic:p.ic||''});
+        }
+      });
+      cacheSet('pitchcwc_stats', statsData);
+      toast('✅ Approved — squad added to stats backend');
+    } else {
+      toast('Status: ' + status);
+    }
+  }
 }
 
 function deleteReg(id) {
   if (!confirm('Delete this registration?')) return;
-  localStorage.setItem('pitchcwc_regs', JSON.stringify(JSON.parse(localStorage.getItem('pitchcwc_regs')||'[]').filter(r=>r.id!==id)));
+  const rem = (cacheGet('pitchcwc_regs')||[]).filter(r=>r.id!==id);
+  cacheSet('pitchcwc_regs', rem);
+  dbDeleteReg(id);
   renderRegistrations();
   toast('Registration deleted');
 }
@@ -1757,13 +2119,14 @@ function clearAllRegs() {
   toast('All registrations cleared');
 }
 
-function adminTab(n) {
-  for (let i = 1; i <= 4; i++) {
-    document.getElementById('atab' + i).classList.toggle('active', i === n);
-    document.getElementById('atab-content' + i).style.display = i === n ? 'block' : 'none';
-  }
-  if (n === 3) renderRegistrations();
-}
+
+// Init fixture builder on load
+window.addEventListener('load', ()=>{
+  onFormatChange();
+  loadRegisteredTeams();
+  renderFixturesAdmin();
+  renderSavedGroupsPreview();
+});
 
 // Direct link: PitchSportsEvent.com/?register
 if (window.location.search.includes('register') || window.location.hash === '#register') {
@@ -1773,88 +2136,563 @@ if (window.location.search.includes('register') || window.location.hash === '#re
 // Init country dropdowns on page load
 window.addEventListener('load', initCountryDropdowns);
 
+
+
+// ===== FIXTURE BUILDER ENGINE =====
+
+var KO_ROUNDS = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Final',4:'Semi Final',2:'Final'};
+
+// Build the per-day rows (date + kickoff + end time + round label)
+
+
+function fxFormatChange() {
+  var fmt = document.getElementById('fx-format').value;
+  var grpSettings = document.getElementById('fx-group-settings');
+  var koWrap = document.getElementById('fx-ko-only-wrap');
+  if (grpSettings) grpSettings.style.display = fmt === 'knockout-only' ? 'none' : 'grid';
+  if (koWrap) koWrap.style.display = fmt === 'knockout-only' ? 'block' : 'none';
+  fxBuildDayRows();
+  fxCalc();
+  updateFxSummary();
+
+  fxUpdateBreakdown();
+}
+
+function updateFxSummary() {
+  var fmt = (document.getElementById('fx-format')||{}).value || 'group-knockout';
+  var el = document.getElementById('fx-summary-text');
+  if (!el) return;
+  if (fmt === 'knockout-only') {
+    var kt = parseInt((document.getElementById('fx-ko-teams')||{}).value||32);
+    el.textContent = kt + ' teams \u00B7 Knockout only \u00B7 ' + (kt-1) + ' matches total';
+  } else {
+    var g  = parseInt((document.getElementById('fx-groups')||{}).value||2);
+    var t  = parseInt((document.getElementById('fx-tpg')||{}).value||5);
+    var mpg = t*(t-1)/2;
+    var txt = (g*t) + ' teams \u00B7 ' + g + ' group' + (g>1?'s':'') + ' of ' + t + ' \u00B7 ' + mpg + ' matches/group \u00B7 ' + (g*mpg) + ' total group matches';
+    if (fmt === 'group-knockout') txt += ' \u00B7 KO from ' + (g*2) + ' teams';
+    el.textContent = txt;
+  }
+}
+
+function fxCalc() {
+  updateFxSummary();
+  var dur   = parseInt((document.getElementById('fx-duration')||{}).value||14);
+  var brk   = parseInt((document.getElementById('fx-break')||{}).value||5);
+  var cts   = parseInt((document.getElementById('fx-courts')||{}).value||2);
+  var nDays = parseInt((document.getElementById('fx-num-days')||{}).value||3);
+  var slot  = dur + brk;
+  var fmt   = (document.getElementById('fx-format')||{}).value||'group-knockout';
+  var g     = parseInt((document.getElementById('fx-groups')||{}).value||2);
+  var t     = parseInt((document.getElementById('fx-tpg')||{}).value||5);
+  var gm    = fmt !== 'knockout-only' ? g*(t*(t-1)/2) : 0;
+  var km    = fmt !== 'league' ? (fmt==='knockout-only' ? parseInt((document.getElementById('fx-ko-teams')||{}).value||32)-1 : g*2-1) : 0;
+  var total = gm + km;
+
+  // Calc slots per day based on first day timing
+  var startEl = document.getElementById('fx-start-1');
+  var endEl   = document.getElementById('fx-end-1');
+  var start = startEl ? startEl.value : '08:00';
+  var end   = endEl   ? endEl.value   : '22:00';
+  var sPts  = start.split(':').map(Number);
+  var ePts  = end.split(':').map(Number);
+  var avail = (ePts[0]*60+ePts[1]) - (sPts[0]*60+sPts[1]);
+  var spd   = Math.floor(avail/slot) * cts;
+
+  updateGroupSlotCounts();
+  var el = document.getElementById('fx-est');
+  if (el) el.innerHTML = '\u26A1 <strong style="color:var(--white)">' + total + ' total matches</strong> ('
+    + gm + ' group + ' + km + ' KO) &nbsp;&middot;&nbsp; ~' + spd + ' slots/day ('
+    + cts + ' pitch' + (cts>1?'es':'') + ') &nbsp;&middot;&nbsp; <strong style="color:var(--gold)">'
+    + nDays + ' match day' + (nDays>1?'s':'') + ' configured</strong>';
+}
+
+function fmtMins(m) {
+  var h = Math.floor(m/60)%24;
+  var mn = m%60;
+  var ap = h>=12?'PM':'AM';
+  var h12 = h>12?h-12:(h===0?12:h);
+  return h12+':'+(mn<10?'0':'')+mn+' '+ap;
+}
+
+function dayLabel(dayNum) {
+  var dateEl = document.getElementById('fx-date-'+dayNum);
+  if (!dateEl || !dateEl.value) return 'Day '+dayNum;
+  try {
+    var d = new Date(dateEl.value+'T00:00:00');
+    return d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  } catch(e) { return 'Day '+dayNum; }
+}
+
+
+function generateKnockoutBracket() {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  var fmt   = document.getElementById('fx-format').value;
+  var g     = parseInt(document.getElementById('fx-groups').value||2);
+  var koT   = fmt==='knockout-only' ? parseInt(document.getElementById('fx-ko-teams').value||32) : g*2;
+  var dur   = parseInt(document.getElementById('fx-duration').value||14);
+  var brk   = parseInt(document.getElementById('fx-break').value||5);
+  var cts   = parseInt(document.getElementById('fx-courts').value||2);
+  var nDays = parseInt(document.getElementById('fx-num-days').value||3);
+  var slot  = dur+brk;
+  var existing = (cacheGet('pitchcwc_matches')||[]);
+  var grpMs    = existing.filter(function(m){return !m.isKO;});
+
+  // Find KO days
+  var koDays = [];
+  for (var d=1;d<=nDays;d++) {
+    var sel = document.getElementById('fx-dayround-'+d);
+    var dt  = sel ? sel.value : '';
+    if (dt==='ko'||dt==='mixed'||dt==='ro32'||dt==='ro16'||dt==='qf'||dt==='sf'||dt==='f') koDays.push(d);
+  }
+  if (!koDays.length) koDays = [nDays];
+
+  var koMatches = [];
+  var koDayIdx = 0;
+  var slotPerDay = {};
+  koDays.forEach(function(d){ slotPerDay[d] = 0; });
+
+  var rem = koT;
+  while (rem >= 2) {
+    var rn = KO_ROUNDS[rem]||'Round of '+rem;
+    var nm = rem/2;
+    for (var mi=0;mi<nm;mi++) {
+      var kd = koDays[Math.min(koDayIdx,koDays.length-1)];
+      var startEl = document.getElementById('fx-start-'+kd);
+      var start = startEl ? startEl.value : '08:00';
+      var sPts  = start.split(':').map(Number);
+      var si    = slotPerDay[kd]||0;
+      var startM = sPts[0]*60+sPts[1]+Math.floor(si/cts)*slot;
+      koMatches.push({
+        id:Date.now()+si+Math.floor(Math.random()*10000),
+        group:rn, round:rn, isKO:true, matchNum:mi+1,
+        home:'TBD '+(mi*2+1), hFlag:'🔵', hCompany:'',
+        away:'TBD '+(mi*2+2), aFlag:'🔴', aCompany:'',
+        scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
+        day:kd, dayLabel:dayLabel(kd),
+        time:fmtMins(startM), endTime:fmtMins(startM+dur),
+        pitch:(si%cts)+1, duration:dur
+      });
+      slotPerDay[kd] = si+1;
+    }
+    rem = rem/2;
+    koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
+  }
+
+  var combined=[...grpMs,...koMatches]; cacheSet('pitchcwc_matches',combined); dbClearMatches().then(function(){ dbSaveMatches(combined); });
+  renderFixturesAdmin();
+  populateAdminMatchSel();
+  toast('KO bracket added: '+koMatches.length+' matches');
+}
+
+
+
+
+
+function renderSavedGroupsPreview() {
+  var el = document.getElementById('saved-groups-preview');
+  if (!el) return;
+  var gs = cacheGet('pitchcwc_groups')||{};
+  if (!Object.keys(gs).length) { el.innerHTML=''; return; }
+  el.innerHTML = '<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:7px">Saved Groups:</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+    + Object.entries(gs).map(function(e) {
+        return '<div style="background:rgba(197,162,39,.06);border:1px solid rgba(197,162,39,.12);border-radius:6px;padding:8px 12px;font-size:12px">'
+          +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-weight:800;color:var(--gold);text-transform:uppercase;margin-bottom:4px">'+e[0]+' ('+e[1].length+')</div>'
+          +e[1].map(function(t){return '<div style="color:var(--muted)">'+(t.flag||'')+' '+(t.name||t)+'</div>';}).join('')
+          +'</div>';
+      }).join('')
+    +'</div>';
+}
+
+function exportSchedule() {
+  var matches = (cacheGet('pitchcwc_matches')||[]);
+  if (!matches.length) { toast('No schedule','red'); return; }
+  var byDay = {};
+  matches.forEach(function(m){ var k='Day '+m.day+' \u2014 '+m.dayLabel; if(!byDay[k])byDay[k]=[]; byDay[k].push(m); });
+  var txt = 'PITCH CORPORATE WORLD CUP 2026 \u2014 MATCH SCHEDULE\n'+'='.repeat(52)+'\n';
+  Object.entries(byDay).forEach(function(e){
+    txt += '\n'+e[0]+'\n'+'-'.repeat(38)+'\n';
+    e[1].forEach(function(m){ txt += m.time+(m.endTime?' \u2192 '+m.endTime:'')+' [P'+(m.pitch||'?')+'] | '+m.group+' | '+m.home+' vs '+m.away+'\n'; });
+  });
+  navigator.clipboard.writeText(txt).then(function(){ toast('Copied!'); }).catch(function(){ toast('Copy failed','red'); });
+}
+
+
+
+function loadRegisteredTeams() {
+  var sel = document.getElementById('grp-picker');
+  if (!sel) return;
+  var regs = (cacheGet('pitchcwc_regs')||[]);
+  var approved = regs.filter(function(r){return r.status==='Approved';});
+  if (!approved.length) { sel.innerHTML='<option value="">No approved teams yet</option>'; return; }
+  sel.innerHTML = approved.map(function(r){
+    return '<option value="'+r.team+'">'+(r.country1?r.country1.split(' ')[0]+' ':'')+r.team+' ('+r.company+')</option>';
+  }).join('');
+}
+
+function grpPickerChange() {
+  var sel = document.getElementById('grp-picker');
+  var ta  = document.getElementById('grp-teams');
+  if (!sel||!ta) return;
+  var selected = Array.from(sel.selectedOptions).map(function(o){return o.value;});
+  if (selected.length) ta.value = selected.join('\n');
+}
+
+// Init on tab open
+function initFixtureTab() {
+  fxBuildDayRows();
+  fxCalc();
+  renderFixturesAdmin();
+  loadRegisteredTeams();
+  renderSavedGroupsPreview();
+
+  var fmt=(document.getElementById('fx-format')||{value:'group-knockout'}).value; fxSelectFormat(fmt);
+}
+
+// ===== END FIXTURE BUILDER =====
+// ===== FIXTURE BUILDER =====
+function addFixture() {
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  const home = document.getElementById('fx-home').value.trim();
+  const away = document.getElementById('fx-away').value.trim();
+  const stage = document.getElementById('fx-stage').value;
+  const day = document.getElementById('fx-day').value;
+  const time = document.getElementById('fx-time').value;
+  const hco = document.getElementById('fx-hcompany').value.trim();
+  const aco = document.getElementById('fx-acompany').value.trim();
+  if(!home||!away){toast('Enter both team names','red');return;}
+  const matches = (cacheGet('pitchcwc_matches')||[]);
+  const id = Date.now();
+  // Parse flag from team name (last char if emoji)
+  const hFlag = home.match(/\p{Emoji}/gu) ? home.match(/\p{Emoji}/gu).slice(-1)[0] : '🔵';
+  const aFlag = away.match(/\p{Emoji}/gu) ? away.match(/\p{Emoji}/gu).slice(-1)[0] : '🔴';
+  const homeName = home.replace(/\p{Emoji}/gu,'').trim();
+  const awayName = away.replace(/\p{Emoji}/gu,'').trim();
+  matches.push({id,group:stage,home:homeName,hFlag,hCompany:hco,away:awayName,aFlag,aCompany:aco,scoreH:0,scoreA:0,status:'upcoming',minute:'',day:parseInt(day),time:formatTime(time)});
+  cacheSet('pitchcwc_matches', matches);
+  // Update only this specific match in Supabase
+  dbUpdateMatch(m).catch(function(){ dbSaveMatches([m]); });
+  // Clear fields
+  ['fx-home','fx-away','fx-hcompany','fx-acompany'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  renderFixturesAdmin();
+  toast('Match added to schedule');
+}
+
+function formatTime(t){
+  if(!t)return'TBD';
+  const [h,m] = t.split(':');
+  const hr = parseInt(h);
+  return `${hr>12?hr-12:hr||12}:${m} ${hr>=12?'PM':'AM'}`;
+}
+
+function renderFixturesAdmin(){
+  const list = document.getElementById('fixtures-admin-list');
+  if(!list)return;
+  const matches = (cacheGet('pitchcwc_matches')||[]);
+  if(matches.length===0){
+    list.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">No matches yet. Assign teams to groups and click Auto-Generate.</div>';
+    renderSavedGroupsPreview();
+    return;
+  }
+  // Group by day first, then group
+  const byDay = {};
+  matches.forEach(m=>{
+    const dk = `Day ${m.day}${m.dayLabel?' — '+m.dayLabel:''}`;
+    if(!byDay[dk]) byDay[dk]={};
+    if(!byDay[dk][m.group]) byDay[dk][m.group]=[];
+    byDay[dk][m.group].push(m);
+  });
+  list.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:10px;text-align:right">'+matches.length+' matches total</div>' +
+    Object.entries(byDay).map(([day, groups])=>`
+    <div style="margin-bottom:18px">
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:900;color:var(--white);text-transform:uppercase;letter-spacing:.04em;padding:8px 12px;background:rgba(197,162,39,.1);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;margin-bottom:10px">${day}</div>
+      ${Object.entries(groups).map(([grp,ms])=>`
+        <div style="margin-bottom:10px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:5px;padding-left:4px">${grp}</div>
+          ${ms.map(m=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--panel2);border-radius:6px;margin-bottom:3px;font-size:12px;flex-wrap:wrap">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:800;color:var(--gold);min-width:70px">${m.time}</span>
+              ${m.endTime?`<span style="color:var(--muted);font-size:11px">→ ${m.endTime}</span>`:''}
+              ${m.pitch?`<span style="background:rgba(197,162,39,.1);padding:2px 6px;border-radius:4px;font-size:10px;color:var(--gold);font-weight:700">P${m.pitch}</span>`:''}
+              <span style="font-size:16px">${m.hFlag}</span>
+              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px">${m.home}</span>
+              <span style="color:var(--muted);font-size:11px;font-weight:700">vs</span>
+              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px;text-align:right">${m.away}</span>
+              <span style="font-size:16px">${m.aFlag}</span>
+              <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${m.status==='live'?'rgba(231,76,60,.2)':m.status==='ft'?'rgba(46,204,113,.1)':'rgba(255,255,255,.06)'};color:${m.status==='live'?'#E74C3C':m.status==='ft'?'#2ECC71':'var(--muted)'}">${m.status==='live'?'LIVE':m.status==='ft'?'FT':'TBD'}</span>
+              <button onclick="deleteFixture(${m.id})" style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.18);color:#E74C3C;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;flex-shrink:0">✕</button>
+            </div>`).join('')}
+        </div>`).join('')}
+    </div>`).join('');
+  renderSavedGroupsPreview();
+}
+
+function deleteFixture(id){
+  const matches = (cacheGet('pitchcwc_matches')||[]).filter(m=>m.id!==id);
+  cacheSet('pitchcwc_matches', matches);
+  // Save the specific updated match to Supabase
+  dbUpdateMatch(m).catch(function(){ dbSaveMatches([m]); });
+  renderFixturesAdmin();
+  toast('Match removed');
+}
+
+function clearFixtures(){
+  if(!confirm('Clear all fixtures?'))return;
+  localStorage.removeItem('pitchcwc_matches');
+  dbClearMatches();
+  renderFixturesAdmin();
+  toast('All fixtures cleared');
+}
+
+function saveGroup(){
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  const grpName = document.getElementById('grp-name').value;
+  const teamsText = document.getElementById('grp-teams').value.trim();
+  if(!teamsText){toast('Enter team names','red');return;}
+  const teamList = teamsText.split('\n').filter(t=>t.trim()).map((t,i)=>{
+    // Extract emoji flag if present
+    const emojiMatch = t.match(/\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu);
+    const flag = emojiMatch ? emojiMatch[0] : '🏳️';
+    const name = t.replace(/\p{Emoji_Presentation}|\p{Emoji}\uFE0F/gu,'').trim();
+    return { pos:i+1, name, flag, company:'', p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0, qualify:i<2 };
+  });
+  const groups = (cacheGet('pitchcwc_groups')||{});
+  groups[grpName] = teamList;
+  cacheSet('pitchcwc_groups', groups);
+  dbSaveGroup(groupName||gName, teamList);
+  renderSavedGroupsPreview();
+  updateEstimatedDuration();
+  toast('✅ ' + grpName + ' saved — ' + teamList.length + ' teams');
+}
+
+function clearGroups(){
+  if(!confirm('Clear all groups?'))return;
+  localStorage.removeItem('pitchcwc_groups');
+  dbClearGroups();
+  toast('All groups cleared');
+}
+
+// ===== DOCUMENT UPLOAD TOGGLE =====
+function toggleDocUpload(wrapperId, value){
+  const wrap = document.getElementById(wrapperId);
+  if(wrap) wrap.style.display = value ? 'block' : 'none';
+}
+
+// ===== UPDATE ADMIN TAB (now 5 tabs) =====
+function adminTab(n) {
+  if (currentRole==='official' && n>2) { toast('Officials: Scores & Stats only','red'); return; }
+  document.querySelectorAll('[id^="atab-content"]').forEach(function(el){ el.style.display='none'; });
+  document.querySelectorAll('.admin-tab').forEach(function(el){ el.classList.remove('active'); });
+  var el = document.getElementById('atab-content'+n);
+  if (el) el.style.display='block';
+  var btn = document.getElementById('atab'+n);
+  if (btn) btn.classList.add('active');
+  if (n===1) { initScoresTab(); }
+  if (n===2) { initStatsTab(); }
+  if (n===3) { syncAndRender('regs', renderRegistrations); }
+  if (n===5) initFixtureTab();
+}
+
+
+// ===== ALSO UPDATE ADMIN MATCH SELECTOR TO USE LOCALSTORAGE =====
+function populateAdminMatchSel(){
+  const sel = document.getElementById('admin-match-sel');
+  if(!sel) return;
+  const matches = (cacheGet('pitchcwc_matches')||[]);
+  if(matches.length===0){
+    sel.innerHTML='<option>No matches added yet — use Fixtures tab to add matches</option>';
+    return;
+  }
+  sel.innerHTML = matches.map(m=>`<option value="${m.id}">${m.group}: ${m.home} vs ${m.away} (Day ${m.day})</option>`).join('');
+  loadMatchForEdit();
+}
+
+function loadMatchForEdit(){
+  const sel = document.getElementById('admin-match-sel');
+  if(!sel) return;
+  const matches = (cacheGet('pitchcwc_matches')||[]);
+  const m = matches.find(x=>x.id===parseInt(sel.value));
+  if(!m) return;
+  document.getElementById('admin-home-name').textContent = m.home;
+  document.getElementById('admin-away-name').textContent = m.away;
+  document.getElementById('admin-score-h').value = m.scoreH;
+  document.getElementById('admin-score-a').value = m.scoreA;
+  document.getElementById('admin-match-status').value = m.status;
+  document.getElementById('admin-match-minute').value = m.minute;
+}
+
+// scorer buffer for current match edit
+let currentScorers = [];
+
+function addScorer(){
+  const team = document.getElementById('scorer-team').value;
+  const name = document.getElementById('scorer-name').value.trim();
+  const minute = document.getElementById('scorer-minute').value.trim();
+  const type = document.getElementById('scorer-type').value;
+  if(!team||!name){toast('Select team and enter player name/number','red');return;}
+  currentScorers.push({team, name, minute, type});
+  renderScorersList();
+  document.getElementById('scorer-name').value='';
+  document.getElementById('scorer-minute').value='';
+  toast('Scorer added');
+}
+
+function renderScorersList(){
+  const el = document.getElementById('scorers-list');
+  if(!el) return;
+  if(currentScorers.length===0){el.innerHTML='';return;}
+  el.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-bottom:6px;font-weight:600">SCORERS:</div>' +
+    currentScorers.map((s,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 10px;background:rgba(197,162,39,.06);border-radius:5px;margin-bottom:4px;font-size:13px">
+      <span style="color:var(--gold);font-weight:700">${s.minute}</span>
+      <span style="color:var(--white);flex:1;margin:0 10px">${s.name} <span style="color:var(--muted);font-size:11px">(${s.team})</span></span>
+      <span style="color:var(--muted);font-size:11px">${s.type}</span>
+      <button onclick="removeScorer(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;margin-left:8px;font-size:14px">✕</button>
+    </div>`).join('');
+}
+
+function removeScorer(i){
+  currentScorers.splice(i,1);
+  renderScorersList();
+}
+
+function saveScore(){
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  const sel = document.getElementById('admin-match-sel');
+  const matches = (cacheGet('pitchcwc_matches')||[]);
+  const m = matches.find(x=>x.id===parseInt(sel.value));
+  if(!m){toast('No match selected','red');return;}
+  m.scoreH = parseInt(document.getElementById('admin-score-h').value)||0;
+  m.scoreA = parseInt(document.getElementById('admin-score-a').value)||0;
+  m.status = document.getElementById('admin-match-status').value;
+  m.minute = document.getElementById('admin-match-minute').value;
+  m.scorers = currentScorers.slice();
+  cacheSet('pitchcwc_matches', matches);
+  dbUpdateMatch(m).catch(function(e){ 
+    console.warn('dbUpdateMatch failed, trying upsert:', e);
+    dbSaveMatches([m]); 
+  });
+
+  // Auto-update stats from scorers
+  updateStatsFromScorers(m);
+
+  toast('Score saved: '+m.home+' '+m.scoreH+'–'+m.scoreA+' '+m.away);
+  currentScorers = [];
+  renderScorersList();
+}
+
+function updateStatsFromScorers(match){
+  if(!match.scorers||!match.scorers.length) return;
+  const statsData = (cacheGet('pitchcwc_stats')||[]);
+  match.scorers.forEach(s=>{
+    if(s.type==='Own Goal') return; // own goals don't count for scorer
+    const teamName = s.team==='home' ? match.home : match.away;
+    const existing = statsData.find(p=>p.name===s.name && p.team===teamName);
+    if(existing){ existing.goals = (existing.goals||0)+1; }
+    else { statsData.push({name:s.name, team:teamName, flag:'⚽', goals:1, assists:0, cs:0, save:0, rating:1}); }
+  });
+  cacheSet('pitchcwc_stats', statsData);
+}
+
+function saveStat(){
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  const name=document.getElementById('stat-player').value.trim();
+  const team=document.getElementById('stat-team').value.trim();
+  const goals=parseInt(document.getElementById('stat-goals').value)||0;
+  const assists=parseInt(document.getElementById('stat-assists').value)||0;
+  const cs=parseInt(document.getElementById('stat-cs').value)||0;
+  const save=parseInt(document.getElementById('stat-save').value)||0;
+  const flag=document.getElementById('stat-flag').value||'🏴';
+  if(!name||!team){toast('Enter player name and team','red');return;}
+  const statsData=(cacheGet('pitchcwc_stats')||[]);
+  const existing=statsData.find(s=>s.name===name);
+  if(existing){existing.goals=goals;existing.assists=assists;existing.flag=flag;}
+  else{statsData.push({name,team,flag,goals,assists,cs:0,save:0,rating:goals+assists});}
+  cacheSet('pitchcwc_stats', statsData);
+  if(cs>0||save>0){
+    const keepersData=(cacheGet('pitchcwc_keepers')||[]);
+    const gk=keepersData.find(k=>k.name===name);
+    if(gk){gk.cs=cs;gk.save=save;}else{keepersData.push({name,team,flag,cs,save});}
+    cacheSet('pitchcwc_keepers', keepersData);
+  }
+  // Save to Supabase
+  dbUpsertStat({name:name, team:team, flag:flag, goals:goals, assists:assists, cs:cs, save:save});
+  toast('Stats updated for '+name);
+  // Refresh stats table
+  if(typeof renderStatsTable==='function') renderStatsTable();
+}
+
+
+// ===== AUTH & ROLES =====
+const DEFAULT_ADMIN_PW = 'pitch2026';
+const DEFAULT_OFFICIAL_PW = 'official2026';
+var adminLoggedIn = false;
+var currentRole = null;
+
+function getAdminPw(){ return localStorage.getItem('pitchcwc_admin_pw') || DEFAULT_ADMIN_PW; }
+function getOfficialPw(){ return localStorage.getItem('pitchcwc_official_pw') || DEFAULT_OFFICIAL_PW; }
+
+
+
+function applyRoleRestrictions(){
+  if(currentRole === 'official'){
+    // Officials only see Scores and Stats tabs
+    [3,4,5,6].forEach(i => {
+      const tab = document.getElementById('atab'+i);
+      if(tab) tab.style.display = 'none';
+    });
+    // Default to scores tab
+    adminTab(1);
+  }
+  // Update settings role display
+  const rd = document.getElementById('settings-role-display');
+  if(rd) rd.textContent = currentRole === 'admin' ? 'Admin' : 'Match Official';
+}
+
+function logout(){
+  adminLoggedIn = false; currentRole = null;
+  showPage('home');
+  // Restore all tabs
+  for(let i=1;i<=6;i++){const t=document.getElementById('atab'+i);if(t)t.style.display='';}
+  toast('Logged out');
+}
+
+function changePassword(type){
+  if(type === 'admin'){
+    const oldPw = document.getElementById('settings-old-admin').value;
+    const newPw = document.getElementById('settings-new-admin').value;
+    const confirmPw = document.getElementById('settings-confirm-admin').value;
+    if(oldPw !== getAdminPw()){toast('❌ Current password incorrect','red');return;}
+    if(!newPw || newPw.length < 6){toast('❌ New password must be at least 6 characters','red');return;}
+    if(newPw !== confirmPw){toast('❌ Passwords do not match','red');return;}
+    localStorage.setItem('pitchcwc_admin_pw', newPw);
+    document.getElementById('settings-old-admin').value='';
+    document.getElementById('settings-new-admin').value='';
+    document.getElementById('settings-confirm-admin').value='';
+    toast('✅ Admin password updated');
+  } else {
+    if(currentRole !== 'admin'){toast('❌ Only admin can change official password','red');return;}
+    const verify = document.getElementById('settings-admin-verify').value;
+    const newPw = document.getElementById('settings-new-official').value;
+    const confirmPw = document.getElementById('settings-confirm-official').value;
+    if(verify !== getAdminPw()){toast('❌ Admin password incorrect','red');return;}
+    if(!newPw || newPw.length < 6){toast('❌ Password must be at least 6 characters','red');return;}
+    if(newPw !== confirmPw){toast('❌ Passwords do not match','red');return;}
+    localStorage.setItem('pitchcwc_official_pw', newPw);
+    document.getElementById('settings-admin-verify').value='';
+    document.getElementById('settings-new-official').value='';
+    document.getElementById('settings-confirm-official').value='';
+    toast('✅ Officials password updated');
+  }
+}
+
 // ===== DATA =====
-const ADMIN_PW = 'pitch2026';
-let adminLoggedIn = false;
 
-let matches = [
-  {id:1,group:'Group A',home:'Brazil',hFlag:'🇧🇷',hCompany:'Shell MDS',away:'France',aFlag:'🇫🇷',aCompany:'BIBD',scoreH:4,scoreA:1,status:'ft',minute:'',day:1,time:'8:00 AM'},
-  {id:2,group:'Group A',home:'Germany',hFlag:'🇩🇪',hCompany:'Baiduri Bank',away:'Spain',aFlag:'🇪🇸',aCompany:'TelBru',scoreH:2,scoreA:2,status:'ft',minute:'',day:1,time:'8:30 AM'},
-  {id:3,group:'Group B',home:'England',hFlag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',hCompany:'JTI Brunei',away:'Portugal',aFlag:'🇵🇹',aCompany:'DST',scoreH:3,scoreA:0,status:'ft',minute:'',day:1,time:'9:00 AM'},
-  {id:4,group:'Group B',home:'Argentina',hFlag:'🇦🇷',hCompany:'PWD',away:'Netherlands',aFlag:'🇳🇱',aCompany:'OGDC',scoreH:1,scoreA:2,status:'ft',minute:'',day:1,time:'9:30 AM'},
-  {id:5,group:'Group C',home:'Italy',hFlag:'🇮🇹',hCompany:'Kristal',away:'Belgium',aFlag:'🇧🇪',aCompany:'RBA',scoreH:0,scoreA:0,status:'live',minute:"8'",day:2,time:'8:00 AM'},
-  {id:6,group:'Group C',home:'Croatia',hFlag:'🇭🇷',hCompany:'Progresif',away:'Japan',aFlag:'🇯🇵',aCompany:'MOH',scoreH:0,scoreA:0,status:'live',minute:"5'",day:2,time:'8:30 AM'},
-  {id:7,group:'Group D',home:'Morocco',hFlag:'🇲🇦',hCompany:'BEDB',away:'USA',aFlag:'🇺🇸',aCompany:'MOF',scoreH:0,scoreA:0,status:'upcoming',minute:'',day:2,time:'9:00 AM'},
-  {id:8,group:'Group D',home:'Mexico',hFlag:'🇲🇽',hCompany:'TNB',away:'Australia',aFlag:'🇦🇺',aCompany:'JPKE',scoreH:0,scoreA:0,status:'upcoming',minute:'',day:2,time:'9:30 AM'},
-  {id:9,group:'Group A',home:'Brazil',hFlag:'🇧🇷',hCompany:'Shell MDS',away:'Germany',aFlag:'🇩🇪',aCompany:'Baiduri Bank',scoreH:0,scoreA:0,status:'upcoming',minute:'',day:2,time:'11:00 AM'},
-  {id:10,group:'Group B',home:'England',hFlag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',hCompany:'JTI Brunei',away:'Argentina',aFlag:'🇦🇷',aCompany:'PWD',scoreH:0,scoreA:0,status:'upcoming',minute:'',day:2,time:'11:30 AM'},
-  {id:11,group:'Knockout',home:'TBD',hFlag:'🔵',hCompany:'Round of 32',away:'TBD',aFlag:'🔴',aCompany:'Round of 32',scoreH:0,scoreA:0,status:'upcoming',minute:'',day:3,time:'8:00 AM'},
-];
 
-let stats = [
-  {name:'Haziq Azri',team:'Brazil (Shell MDS)',flag:'🇧🇷',goals:7,assists:3,cs:0,save:0,rating:10},
-  {name:'Muhd Faiz',team:'England (JTI)',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',goals:6,assists:2,cs:0,save:0,rating:8},
-  {name:'Rizwan Idris',team:'Argentina (PWD)',flag:'🇦🇷',goals:5,assists:4,cs:0,save:0,rating:9},
-  {name:'Amirul Nizam',team:'Morocco (BEDB)',flag:'🇲🇦',goals:5,assists:2,cs:0,save:0,rating:7},
-  {name:'Syafiq Hj Ali',team:'Portugal (DST)',flag:'🇵🇹',goals:4,assists:1,cs:0,save:0,rating:5},
-  {name:'Nabil Afiq',team:'Germany (Baiduri)',flag:'🇩🇪',goals:4,assists:3,cs:0,save:0,rating:7},
-];
-
-let keepers = [
-  {name:'Khairul Anwar',team:'Brazil (Shell MDS)',flag:'🇧🇷',cs:4,save:82},
-  {name:'Asri Isnain',team:'Argentina (PWD)',flag:'🇦🇷',cs:3,save:79},
-  {name:'Hafizuddin Md',team:'Morocco (BEDB)',flag:'🇲🇦',cs:3,save:74},
-  {name:'Azrul Ridhwan',team:'England (JTI)',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',cs:2,save:71},
-  {name:'Norzaidi Kamis',team:'Germany (Baiduri)',flag:'🇩🇪',cs:2,save:68},
-];
 
 let announcement = '';
 
-const groupsData = {
-  'Group A':[
-    {pos:1,flag:'🇧🇷',name:'Brazil',company:'Shell MDS',p:2,w:1,d:0,l:1,gf:4,ga:2,pts:3,qualify:true},
-    {pos:2,flag:'🇩🇪',name:'Germany',company:'Baiduri Bank',p:2,w:1,d:1,l:0,gf:4,ga:4,pts:4,qualify:true},
-    {pos:3,flag:'🇪🇸',name:'Spain',company:'TelBru',p:2,w:0,d:1,l:1,gf:2,ga:4,pts:1,qualify:false},
-    {pos:4,flag:'🇫🇷',name:'France',company:'BIBD',p:2,w:0,d:0,l:2,gf:1,ga:5,pts:0,qualify:false},
-  ],
-  'Group B':[
-    {pos:1,flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',name:'England',company:'JTI Brunei',p:2,w:2,d:0,l:0,gf:6,ga:1,pts:6,qualify:true},
-    {pos:2,flag:'🇳🇱',name:'Netherlands',company:'OGDC',p:2,w:1,d:0,l:1,gf:3,ga:2,pts:3,qualify:true},
-    {pos:3,flag:'🇦🇷',name:'Argentina',company:'PWD',p:2,w:0,d:1,l:1,gf:1,ga:3,pts:1,qualify:false},
-    {pos:4,flag:'🇵🇹',name:'Portugal',company:'DST',p:2,w:0,d:1,l:1,gf:0,ga:4,pts:1,qualify:false},
-  ],
-  'Group C':[
-    {pos:1,flag:'🇮🇹',name:'Italy',company:'Kristal',p:1,w:0,d:1,l:0,gf:0,ga:0,pts:1,qualify:false},
-    {pos:2,flag:'🇧🇪',name:'Belgium',company:'RBA',p:1,w:0,d:1,l:0,gf:0,ga:0,pts:1,qualify:false},
-    {pos:3,flag:'🇭🇷',name:'Croatia',company:'Progresif',p:1,w:0,d:1,l:0,gf:0,ga:0,pts:1,qualify:false},
-    {pos:4,flag:'🇯🇵',name:'Japan',company:'MOH',p:1,w:0,d:1,l:0,gf:0,ga:0,pts:1,qualify:false},
-  ],
-  'Group D':[
-    {pos:1,flag:'🇲🇦',name:'Morocco',company:'BEDB',p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0,qualify:false},
-    {pos:2,flag:'🇺🇸',name:'USA',company:'MOF',p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0,qualify:false},
-    {pos:3,flag:'🇲🇽',name:'Mexico',company:'TNB',p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0,qualify:false},
-    {pos:4,flag:'🇦🇺',name:'Australia',company:'JPKE',p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0,qualify:false},
-  ],
-};
 
-const teams = [
-  {name:'Brazil',flag:'🇧🇷',company:'Shell MDS Brunei',group:'Group A',players:12,status:'Approved'},
-  {name:'Germany',flag:'🇩🇪',company:'Baiduri Bank',group:'Group A',players:11,status:'Approved'},
-  {name:'Spain',flag:'🇪🇸',company:'TelBru',group:'Group A',players:12,status:'Approved'},
-  {name:'France',flag:'🇫🇷',company:'BIBD',group:'Group A',players:10,status:'Approved'},
-  {name:'England',flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿',company:'JTI Brunei',group:'Group B',players:12,status:'Approved'},
-  {name:'Netherlands',flag:'🇳🇱',company:'OGDC',group:'Group B',players:11,status:'Approved'},
-  {name:'Argentina',flag:'🇦🇷',company:'PWD Warriors',group:'Group B',players:12,status:'Approved'},
-  {name:'Portugal',flag:'🇵🇹',company:'DST Communications',group:'Group B',players:11,status:'Pending'},
-  {name:'Italy',flag:'🇮🇹',company:'Kristal-Astro',group:'Group C',players:12,status:'Approved'},
-  {name:'Belgium',flag:'🇧🇪',company:'RBA',group:'Group C',players:10,status:'Approved'},
-  {name:'Croatia',flag:'🇭🇷',company:'Progresif',group:'Group C',players:11,status:'Approved'},
-  {name:'Japan',flag:'🇯🇵',company:'Ministry of Health',group:'Group C',players:9,status:'Pending'},
-  {name:'Morocco',flag:'🇲🇦',company:'BEDB',group:'Group D',players:12,status:'Approved'},
-  {name:'USA',flag:'🇺🇸',company:'MOF',group:'Group D',players:10,status:'Approved'},
-  {name:'Mexico',flag:'🇲🇽',company:'TNB',group:'Group D',players:11,status:'Approved'},
-  {name:'Australia',flag:'🇦🇺',company:'JPKE Rangers',group:'Group D',players:8,status:'Pending'},
-];
 
 // ===== RENDER FUNCTIONS =====
 function renderMatch(m){
@@ -1893,30 +2731,80 @@ function renderMatch(m){
 function renderLive(){
   const grid = document.getElementById('liveMatchGrid');
   if(!grid) return;
+  if(typeof _doRenderLive==='function'){ _doRenderLive(); return; }
+  // Pull latest matches and announcement from Supabase
+  Promise.all([
+    dbGetMatches().catch(function(){return [];}),
+    dbGetSetting('announcement').catch(function(){return null;})
+  ]).then(function(results){
+    var rows = results[0]; var ann = results[1];
+    if(rows && rows.length) cacheSet('pitchcwc_matches', rows);
+    if(ann !== null) localStorage.setItem('pitchcwc_announcement', ann||'');
+    _doRenderLive();
+  }).catch(function(){ _doRenderLive(); });
+}
+function _doRenderLive(){
+  const grid = document.getElementById('liveMatchGrid');
+  if(!grid) return;
   let html = '';
-  if(announcement) html = `<div style="grid-column:1/-1;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:16px 20px;font-weight:600;color:var(--gold);font-size:15px;margin:0 16px 0">📢 ${announcement}</div>`;
-  const live = matches.filter(m=>m.status==='live');
-  const ft = matches.filter(m=>m.status==='ft');
-  const up = matches.filter(m=>m.status==='upcoming');
-  if(live.length){
-    html+=`<div style="grid-column:1/-1;padding:16px 16px 4px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.05em">🔴 Live Now</div>`;
-    live.forEach(m=>html+=renderMatch(m));
+
+  // Announcement banner (from admin)
+  const savedAnnouncement = localStorage.getItem('pitchcwc_announcement')||'';
+  if(savedAnnouncement){
+    html += `<div style="grid-column:1/-1;background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:10px;padding:16px 20px;font-weight:600;color:var(--gold);font-size:15px;margin:0 16px 16px">📢 ${savedAnnouncement}</div>`;
   }
-  if(ft.length){
-    html+=`<div style="grid-column:1/-1;padding:16px 16px 4px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--gold);text-transform:uppercase;letter-spacing:.05em">Results</div>`;
-    ft.forEach(m=>html+=renderMatch(m));
+
+  // Load matches from localStorage (set by admin)
+  const allMatches = (cacheGet('pitchcwc_matches')||[]);
+  const liveNow  = allMatches.filter(m=>m.status==='live');
+  const results  = allMatches.filter(m=>m.status==='ft');
+  const upcoming = allMatches.filter(m=>m.status==='upcoming');
+  const total    = allMatches.length;
+
+  // Empty state — no matches added yet
+  if(total === 0 && !savedAnnouncement){
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:100px 20px">
+      <div style="font-size:56px;margin-bottom:20px">⚽</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:900;color:var(--white);text-transform:uppercase;letter-spacing:.03em;margin-bottom:10px">Match Day Coming Soon</div>
+      <div style="font-size:15px;color:var(--muted);max-width:380px;margin:0 auto;line-height:1.7">Live scores will appear here automatically once the tournament begins on <strong style="color:var(--gold)">July 5, 2026</strong>.</div>
+      <div style="margin-top:28px;display:inline-flex;align-items:center;gap:8px;background:rgba(245,197,24,.07);border:1px solid rgba(245,197,24,.18);border-radius:30px;padding:10px 22px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;color:var(--gold);letter-spacing:.1em;text-transform:uppercase">
+        <span style="width:7px;height:7px;background:var(--red);border-radius:50%;animation:blink .9s infinite"></span>
+        Live scoring updates every 30 seconds
+      </div>
+    </div>`;
+    return;
   }
-  if(up.length){
-    html+=`<div style="grid-column:1/-1;padding:16px 16px 4px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Upcoming</div>`;
-    up.forEach(m=>html+=renderMatch(m));
+
+  // Show sections only if they have content
+  if(liveNow.length){
+    html += `<div style="grid-column:1/-1;padding:16px 16px 6px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--red);text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;background:var(--red);border-radius:50%;animation:blink .9s infinite;display:inline-block"></span>Live Now</div>`;
+    liveNow.forEach(m=>html+=renderMatch(m));
   }
+  if(results.length){
+    html += `<div style="grid-column:1/-1;padding:16px 16px 6px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.05em">Results</div>`;
+    results.forEach(m=>html+=renderMatch(m));
+  }
+  if(upcoming.length){
+    html += `<div style="grid-column:1/-1;padding:16px 16px 6px;font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Upcoming</div>`;
+    upcoming.forEach(m=>html+=renderMatch(m));
+  }
+
   grid.innerHTML = html;
 }
 
-function renderFixtures(filter='all'){
+function renderFixtures(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderFixtures(filter);
+}
+function _doRenderFixtures(filter){
   const grid = document.getElementById('fixturesGrid');
   if(!grid) return;
-  const filtered = filter==='all'?matches:matches.filter(m=>m.group===filter);
+  const allM = (cacheGet('pitchcwc_matches')||[]);
+  const filtered = filter==='all'?allM:allM.filter(m=>m.group===filter);
+  if(filtered.length===0){
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">📅</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Fixtures Coming Soon</div><div style="font-size:14px;color:var(--muted)">Match fixtures will appear here once the organiser sets up the schedule.</div></div>';
+    return;
+  }
   grid.innerHTML = filtered.map(renderMatch).join('');
 }
 
@@ -1926,10 +2814,19 @@ function filterFixtures(f,btn){
   renderFixtures(f);
 }
 
-function renderStandings(){
+function renderStandings(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderStandings(filter);
+}
+function _doRenderStandings(){
   const grid = document.getElementById('standingsGrid');
   if(!grid) return;
-  grid.innerHTML = Object.entries(groupsData).map(([g,rows])=>`
+  const savedGroups = (cacheGet('pitchcwc_groups')||null);
+  if(!savedGroups||Object.keys(savedGroups).length===0){
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">🏆</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Standings Coming Soon</div><div style="font-size:14px;color:var(--muted)">Group standings will appear once teams are assigned and matches begin.</div></div>';
+    return;
+  }
+  grid.innerHTML = Object.entries(savedGroups).map(([g,rows])=>`
     <div class="standings-group">
       <div class="group-label">${g}</div>
       <table class="standings-table">
@@ -1944,8 +2841,19 @@ function renderStandings(){
   `).join('');
 }
 
-function renderStats(){
-  const sorted = [...stats].sort((a,b)=>b.goals-a.goals);
+function renderStats(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderStats(filter);
+}
+function _doRenderStats(){
+  const statsData = (cacheGet('pitchcwc_stats')||[]);
+  const keepersData = (cacheGet('pitchcwc_keepers')||[]);
+  if(statsData.length===0){
+    const emptyHtml = '<div style="text-align:center;padding:48px 16px"><div style="font-size:36px;margin-bottom:10px">📊</div><div style="font-family:Barlow Condensed,sans-serif;font-size:20px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:6px">Stats Coming Soon</div><div style="font-size:13px;color:var(--muted)">Player statistics will appear once matches are played.</div></div>';
+    ['topScorers','bestPlayers','bestGK'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML=emptyHtml;});
+    return;
+  }
+  const sorted = [...statsData].sort((a,b)=>b.goals-a.goals);
   document.getElementById('topScorers').innerHTML = sorted.map((p,i)=>`
     <div class="lb-row">
       <div class="lb-rank lb-rank-${i+1}">${i+1}</div>
@@ -1954,7 +2862,7 @@ function renderStats(){
       <div style="text-align:right"><div class="lb-stat">${p.goals}</div><div class="lb-stat-label">goals</div></div>
     </div>`).join('');
 
-  const sortedRating = [...stats].sort((a,b)=>(b.goals+b.assists)-(a.goals+a.assists));
+  const sortedRating = [...statsData].sort((a,b)=>(b.goals+b.assists)-(a.goals+a.assists));
   document.getElementById('bestPlayers').innerHTML = sortedRating.map((p,i)=>`
     <div class="lb-row">
       <div class="lb-rank lb-rank-${i+1}">${i+1}</div>
@@ -1963,7 +2871,7 @@ function renderStats(){
       <div style="text-align:right"><div class="lb-stat">${p.goals+p.assists}</div><div class="lb-stat-label">G+A</div></div>
     </div>`).join('');
 
-  const sortedGK = [...keepers].sort((a,b)=>b.cs-a.cs||b.save-a.save);
+  const sortedGK = [...keepersData].sort((a,b)=>b.cs-a.cs||b.save-a.save);
   document.getElementById('bestGK').innerHTML = sortedGK.map((p,i)=>`
     <div class="lb-row">
       <div class="lb-rank lb-rank-${i+1}">${i+1}</div>
@@ -1973,51 +2881,636 @@ function renderStats(){
     </div>`).join('');
 }
 
-function renderTeams(){
+function renderTeams(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderTeams(filter);
+}
+function _doRenderTeams(){
   const grid = document.getElementById('teamsGrid');
   if(!grid) return;
-  grid.innerHTML = teams.map(t=>`
+  const regs = (cacheGet('pitchcwc_regs')||[]);
+  const approved = regs.filter(r=>r.status==='Approved');
+  if(approved.length===0){
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:80px 20px"><div style="font-size:52px;margin-bottom:14px">👕</div><div style="font-family:Barlow Condensed,sans-serif;font-size:28px;font-weight:900;color:var(--white);text-transform:uppercase;margin-bottom:8px">Teams Coming Soon</div><div style="font-size:14px;color:var(--muted)">Approved registered teams will appear here.</div></div>';
+    return;
+  }
+  grid.innerHTML = approved.map(t=>`
     <div class="card">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
-        <div style="font-size:40px">${t.flag}</div>
+        <div style="font-size:36px">${t.country1?t.country1.split(' ')[0]:'🏳️'}</div>
         <div>
-          <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--white);text-transform:uppercase">${t.name}</div>
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:800;color:var(--white);text-transform:uppercase">${t.team}</div>
           <div style="font-size:13px;color:var(--muted)">${t.company}</div>
         </div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)">
-        <span style="color:var(--muted)">Group</span><span style="color:var(--gold);font-weight:600">${t.group}</span>
+        <span style="color:var(--muted)">Country</span><span style="color:var(--gold);font-weight:600">${t.country1||'TBD'}</span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)">
-        <span style="color:var(--muted)">Players</span><span style="color:var(--white)">${t.players}/12</span>
+        <span style="color:var(--muted)">Players</span><span style="color:var(--white)">${(t.staffPlayers||[]).length+(t.nonStaffPlayers||[]).length}/12</span>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;padding:8px 0;border-top:1px solid rgba(255,255,255,.06)">
-        <span style="color:var(--muted)">Status</span><span style="color:${t.status==='Approved'?'var(--green)':'var(--gold)'};font-weight:600">${t.status}</span>
+        <span style="color:var(--muted)">Contact</span><span style="color:var(--white);font-size:12px">${t.contactPerson}</span>
       </div>
+      ${(t.staffPlayers||[]).length+(t.nonStaffPlayers||[]).length > 0 ? `
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;color:var(--gold);font-weight:700;cursor:pointer;padding:6px 0;font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:.06em;list-style:none">▶ Squad (${(t.staffPlayers||[]).length+(t.nonStaffPlayers||[]).length} players)</summary>
+        <div style="margin-top:8px">
+          ${[...(t.staffPlayers||[]).map(p=>({...p,cat:'Staff'})), ...(t.nonStaffPlayers||[]).map(p=>({...p,cat:'Import'}))].map(p=>`
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:12px">
+              <span style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:900;color:var(--gold);min-width:28px">#${p.jersey||p.jersey_no||'—'}</span>
+              <span style="flex:1;color:var(--white);font-weight:500">${p.name}</span>
+              <span style="color:var(--muted)">${p.position||'—'}</span>
+              <span style="font-size:10px;padding:2px 6px;border-radius:10px;background:${p.cat==='Staff'?'rgba(46,204,113,.1)':'rgba(197,162,39,.1)'};color:${p.cat==='Staff'?'#2ECC71':'var(--gold)'}">${p.cat}</span>
+            </div>`).join('')}
+        </div>
+      </details>` : ''}
     </div>`).join('');
 }
 
-function populateAdminMatchSel(){
-  const sel = document.getElementById('admin-match-sel');
-  if(!sel) return;
-  sel.innerHTML = matches.map(m=>`<option value="${m.id}">${m.group}: ${m.home} vs ${m.away} (Day ${m.day})</option>`).join('');
-  loadMatchForEdit();
-}
-
-function loadMatchForEdit(){
-  const sel = document.getElementById('admin-match-sel');
-  if(!sel) return;
-  const m = matches.find(x=>x.id===parseInt(sel.value));
-  if(!m) return;
-  document.getElementById('admin-home-name').textContent = m.home;
-  document.getElementById('admin-away-name').textContent = m.away;
-  document.getElementById('admin-score-h').value = m.scoreH;
-  document.getElementById('admin-score-a').value = m.scoreA;
-  document.getElementById('admin-match-status').value = m.status;
-  document.getElementById('admin-match-minute').value = m.minute;
-}
 
 // ===== NAVIGATION =====
+
+// ── ADMIN AUTH ──────────────────────────────────────────────
+
+
+
+function updateGroupSlotCounts() {
+  var dur   = parseInt((document.getElementById('fx-duration')||{}).value||14);
+  var brk   = parseInt((document.getElementById('fx-break')||{}).value||5);
+  var cts   = parseInt((document.getElementById('fx-courts')||{}).value||2);
+  var slot  = dur + brk;
+  var nDays = parseInt((document.getElementById('fx-num-days')||{}).value||3);
+  var numGroups = parseInt((document.getElementById('fx-groups')||{}).value||2);
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, numGroups);
+  for (var d = 1; d <= nDays; d++) {
+    letters.forEach(function(l) {
+      var startEl = document.getElementById('fx-start-'+d+'-'+l);
+      var endEl   = document.getElementById('fx-end-'+d+'-'+l);
+      var infoEl  = document.getElementById('fx-slots-'+d+'-'+l);
+      if (!startEl || !endEl || !infoEl) return;
+      var sPts = startEl.value.split(':').map(Number);
+      var ePts = endEl.value.split(':').map(Number);
+      var avail = (ePts[0]*60+ePts[1]) - (sPts[0]*60+sPts[1]);
+      if (avail <= 0) { infoEl.textContent = '—'; return; }
+      var slots = Math.floor(avail / slot);
+      infoEl.innerHTML = '<span style="color:var(--gold);font-weight:700">'+slots+'</span> slots';
+    });
+  }
+}
+
+function recalcEst(){ fxCalc(); }
+function updateEstimatedDuration(){ fxCalc(); }
+function onFormatChange(){ fxFormatChange(); }
+function updateGroupStageOptions(){ fxFormatChange(); }
+
+
+function changeAdminPw() {
+  var old = document.getElementById('s-old') || document.getElementById('s-old-admin');
+  var nw  = document.getElementById('s-new') || document.getElementById('s-new-admin');
+  var cf  = document.getElementById('s-confirm') || document.getElementById('s-confirm-admin');
+  if (!old||!nw||!cf) { toast('Settings fields not found','red'); return; }
+  var aPw = localStorage.getItem('pitchcwc_admin_pw') || 'pitch2026';
+  if (old.value !== aPw) { toast('Current password incorrect','red'); return; }
+  if (!nw.value || nw.value.length < 6) { toast('New password must be at least 6 chars','red'); return; }
+  if (nw.value !== cf.value) { toast('Passwords do not match','red'); return; }
+  localStorage.setItem('pitchcwc_admin_pw', nw.value);
+  old.value=''; nw.value=''; cf.value='';
+  toast('Admin password updated');
+}
+function changeOffPw() {
+  if (currentRole !== 'admin') { toast('Only admin can change official password','red'); return; }
+  var v   = document.getElementById('s-verify') || document.getElementById('s-admin-verify');
+  var nw  = document.getElementById('s-off-new') || document.getElementById('s-new-official');
+  var cf  = document.getElementById('s-off-confirm') || document.getElementById('s-confirm-official');
+  if (!v||!nw||!cf) { toast('Settings fields not found','red'); return; }
+  var aPw = localStorage.getItem('pitchcwc_admin_pw') || 'pitch2026';
+  if (v.value !== aPw) { toast('Admin password incorrect','red'); return; }
+  if (!nw.value || nw.value.length < 6) { toast('Password must be at least 6 chars','red'); return; }
+  if (nw.value !== cf.value) { toast('Passwords do not match','red'); return; }
+  localStorage.setItem('pitchcwc_official_pw', nw.value);
+  v.value=''; nw.value=''; cf.value='';
+  toast('Officials password updated');
+}
+
+
+function doLogout() {
+  adminLoggedIn = false;
+  currentRole = null;
+  localStorage.removeItem('pitchcwc_role');
+  if(typeof updateNavForLogin==='function') updateNavForLogin();
+  // Re-show all tabs
+  ['atab3','atab4','atab5','atab6','at3','at4','at5','at6'].forEach(function(id){
+    var t = document.getElementById(id);
+    if(t) t.style.display = '';
+  });
+  showPage('home');
+  toast('Logged out successfully');
+}
+
+
+// ================================================================
+// LIVE DRAW ENGINE
+// ================================================================
+var _drawBowl   = [];
+var _drawGroups = {};
+var _drawNames  = [];
+var _drawTPG    = 5;
+var _drawCursor = 0;
+var _drawDone   = false;
+
+function drawInit() {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  var ng  = parseInt(document.getElementById('draw-num-groups').value||2);
+  var tpg = parseInt(document.getElementById('draw-tpg').value||5);
+  _drawTPG = tpg;
+
+  // Load approved teams from cache then DB
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  if (!regs.length) {
+    // Try DB
+    dbGetRegs().then(function(rows){
+      var approved = rows.filter(function(r){ return r.status==='Approved'; });
+      if (!approved.length) { toast('No approved teams found — approve registrations first','red'); return; }
+      var mapped = approved.map(function(r){
+        return { name:r.team||r.company, flag:(r.country1||r.c1||'').split(' ')[0]||'🏳️', company:r.company, id:r.id };
+      });
+      _drawStart(ng, tpg, mapped);
+    });
+    return;
+  }
+  var teams = regs.map(function(r){
+    return { name:r.team, flag:(r.c1||r.country1||'').split(' ')[0]||'🏳️', company:r.company, id:r.id };
+  });
+  _drawStart(ng, tpg, teams);
+}
+
+function _drawStart(ng, tpg, teams) {
+  // Fisher-Yates shuffle
+  var bowl = teams.slice();
+  for (var i=bowl.length-1; i>0; i--) {
+    var j = Math.floor(Math.random()*(i+1));
+    var t=bowl[i]; bowl[i]=bowl[j]; bowl[j]=t;
+  }
+  _drawBowl = bowl;
+  _drawNames = [];
+  _drawGroups = {};
+  for (var g=0; g<ng; g++) {
+    var gn = 'Group '+String.fromCharCode(65+g);
+    _drawNames.push(gn);
+    _drawGroups[gn] = [];
+  }
+  _drawCursor = 0; _drawDone = false;
+  document.getElementById('draw-setup').style.display = 'none';
+  document.getElementById('draw-bowl-section').style.display = 'block';
+  var pullBtn = document.getElementById('draw-pull-btn');
+  if (pullBtn) { pullBtn.disabled=false; pullBtn.textContent='🎲 Pull Team'; }
+  var saveBtn = document.getElementById('draw-save-btn');
+  if (saveBtn) saveBtn.style.display='none';
+  _drawRefresh();
+  toast(_drawBowl.length+' teams in the bowl — ready to draw!');
+}
+
+function drawPull() {
+  if (_drawBowl.length===0) { toast('Bowl is empty!','red'); return; }
+  if (_drawDone)             { toast('Draw is complete!','red'); return; }
+
+  // Find next group needing teams (round-robin across groups)
+  var target = null;
+  for (var attempt=0; attempt<_drawNames.length*2; attempt++) {
+    var gn = _drawNames[_drawCursor % _drawNames.length];
+    if (_drawGroups[gn].length < _drawTPG) { target=gn; _drawCursor++; break; }
+    _drawCursor++;
+  }
+  if (!target) { _drawDone=true; _drawRefresh(); return; }
+
+  // Pull random team
+  var idx = Math.floor(Math.random()*_drawBowl.length);
+  var team = _drawBowl.splice(idx, 1)[0];
+  _drawGroups[target].push(team);
+
+  // Animate reveal
+  var rev = document.getElementById('draw-reveal');
+  if (rev) {
+    rev.style.opacity='0'; rev.style.transform='scale(0.7)';
+    setTimeout(function(){
+      rev.innerHTML =
+        '<div style="font-size:46px;margin-bottom:6px">'+team.flag+'</div>'+
+        '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:24px;font-weight:900;color:var(--white);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">'+team.name+'</div>'+
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+team.company+'</div>'+
+        '<div style="background:var(--gg);color:#000;font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:900;padding:5px 20px;border-radius:20px;display:inline-block;text-transform:uppercase;letter-spacing:.08em">→ '+target+'</div>';
+      rev.style.transition='all 0.25s ease';
+      rev.style.opacity='1'; rev.style.transform='scale(1)';
+    }, 120);
+  }
+
+  // Check if draw is complete
+  var allFull = _drawNames.every(function(gn){ return _drawGroups[gn].length >= _drawTPG; });
+  if (allFull || _drawBowl.length===0) {
+    _drawDone = true;
+    var pullBtn = document.getElementById('draw-pull-btn');
+    if (pullBtn) { pullBtn.disabled=true; pullBtn.textContent='✅ Draw Complete'; }
+    var saveBtn = document.getElementById('draw-save-btn');
+    if (saveBtn) saveBtn.style.display='block';
+    toast('🎉 Draw complete! All teams assigned.');
+  }
+  _drawRefresh();
+}
+
+function _drawRefresh() {
+  // Bowl chips
+  var bowlEl = document.getElementById('draw-bowl-teams');
+  var countEl = document.getElementById('draw-bowl-count');
+  if (bowlEl) {
+    bowlEl.innerHTML = _drawBowl.map(function(t){
+      return '<div style="background:var(--panel3);border:1px solid rgba(255,255,255,.07);border-radius:5px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--text);display:inline-flex;align-items:center;gap:4px">'+
+        t.flag+' <span>'+t.name+'</span></div>';
+    }).join('') || '<div style="font-size:12px;color:var(--dim);padding:8px 0">Empty</div>';
+  }
+  if (countEl) countEl.textContent = '('+_drawBowl.length+' left)';
+
+  // Next group indicator
+  var ngi = document.getElementById('draw-next-group');
+  var sti = document.getElementById('draw-status');
+  if (!_drawDone && _drawNames.length) {
+    var next = '';
+    for (var i=0; i<_drawNames.length; i++) {
+      var gn = _drawNames[(_drawCursor+i) % _drawNames.length];
+      if (_drawGroups[gn] && _drawGroups[gn].length < _drawTPG) { next=gn; break; }
+    }
+    if (ngi) ngi.textContent = 'Next → '+next;
+    if (sti) sti.textContent = _drawBowl.length+' teams remaining · '+
+      _drawNames.map(function(gn){ return gn+': '+(_drawGroups[gn]||[]).length+'/'+_drawTPG; }).join(' · ');
+  } else if (_drawDone) {
+    if (ngi) { ngi.textContent='✅ Complete'; ngi.style.background='#2ECC71'; ngi.style.color='#fff'; }
+    if (sti) sti.textContent='All teams have been drawn. Save to apply to fixtures.';
+  }
+
+  // Groups grid
+  var grid = document.getElementById('draw-groups-grid');
+  if (!grid) return;
+  grid.innerHTML = _drawNames.map(function(gn){
+    var teams = _drawGroups[gn]||[];
+    var full  = teams.length >= _drawTPG;
+    return '<div style="background:var(--panel2);border:1px solid '+(full?'rgba(46,204,113,.25)':'rgba(255,255,255,.06)')+';border-radius:8px;overflow:hidden">'+
+      '<div style="padding:9px 13px;font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:900;color:'+(full?'#2ECC71':'var(--gold)')+';text-transform:uppercase;display:flex;justify-content:space-between;background:'+(full?'rgba(46,204,113,.1)':'rgba(201,162,39,.07)')+'">'+
+        '<span>'+gn+'</span><span style="font-weight:600;font-size:13px;color:var(--muted)">'+teams.length+'/'+_drawTPG+'</span>'+
+      '</div>'+
+      '<div style="padding:10px 13px">'+
+        (teams.length ? teams.map(function(t,i){
+          return '<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+
+            '<span style="font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:900;color:var(--gold);min-width:18px">'+(i+1)+'.</span>'+
+            '<span style="font-size:18px">'+t.flag+'</span>'+
+            '<div><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:900;color:var(--white);text-transform:uppercase">'+t.name+'</div>'+
+            '<div style="font-size:10px;color:var(--muted)">'+t.company+'</div></div>'+
+          '</div>';
+        }).join('') : '<div style="font-size:12px;color:var(--dim);padding:5px 0">Waiting...</div>')+
+      '</div></div>';
+  }).join('');
+}
+
+function drawSave() {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  if (!_drawDone && _drawBowl.length > 0) {
+    if (!confirm('Draw is not fully complete. Save current assignments anyway?')) return;
+  }
+  var gs = cacheGet('pitchcwc_groups')||{};
+  _drawNames.forEach(function(gn) {
+    gs[gn] = (_drawGroups[gn]||[]).map(function(t,i){
+      return { pos:i+1, name:t.name, flag:t.flag, company:t.company,
+               p:0,w:0,d:0,l:0,gf:0,ga:0,pts:0, qualify:i<2 };
+    });
+    dbSaveGroup(gn, gs[gn]);
+  });
+  cacheSet('pitchcwc_groups', gs);
+  Object.keys(gs).forEach(function(gn){ dbSaveGroup(gn, gs[gn]); });
+  toast('✅ Groups saved! Go to Fixtures tab to generate the schedule.');
+}
+
+function drawReset() {
+  if (_drawBowl.length || Object.keys(_drawGroups).length) {
+    if (!confirm('Reset the draw? All current assignments will be cleared.')) return;
+  }
+  _drawBowl=[]; _drawGroups={}; _drawNames=[]; _drawCursor=0; _drawDone=false;
+  document.getElementById('draw-setup').style.display='block';
+  document.getElementById('draw-bowl-section').style.display='none';
+  var pullBtn=document.getElementById('draw-pull-btn');
+  if(pullBtn){pullBtn.disabled=false;pullBtn.textContent='🎲 Pull Team';}
+  var saveBtn=document.getElementById('draw-save-btn');
+  if(saveBtn) saveBtn.style.display='none';
+  toast('Draw reset');
+}
+// ================================================================
+// END DRAW ENGINE
+// ================================================================
+
+
+function fxBuildDayRows() {
+  var n   = parseInt(document.getElementById('fx-num-days').value || 3);
+  var con = document.getElementById('fx-day-rows');
+  if (!con) return;
+  var fmt = (document.getElementById('fx-format')||{}).value || 'group-knockout';
+  var ng  = parseInt((document.getElementById('fx-groups')||{}).value || 2);
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+
+  // Default dates: Jul 5, 12, 19 weekly
+  var baseDates = ['2026-07-05','2026-07-12','2026-07-19','2026-07-26','2026-08-02'];
+
+  // Default round labels per day index
+  var defaultRounds = [];
+  if (fmt === 'group-knockout') {
+    if (n === 3) defaultRounds = ['rr1','rr2','ko'];
+    else if (n === 2) defaultRounds = ['group','ko'];
+    else for (var d=0;d<n;d++) defaultRounds.push(d===n-1?'ko':'rr'+(d+1));
+  } else {
+    for (var d=0;d<n;d++) defaultRounds.push('rr'+(d+1));
+  }
+
+  var roundOptions =
+    '<option value="rr1">Round Robin — Matchday 1</option>' +
+    '<option value="rr2">Round Robin — Matchday 2</option>' +
+    '<option value="rr3">Round Robin — Matchday 3</option>' +
+    '<option value="rr4">Round Robin — Matchday 4</option>' +
+    '<option value="group">All Group Stage Matches</option>' +
+    '<option value="ko">Knockout Rounds (QF + SF + Final)</option>' +
+    '<option value="ro16">Round of 16</option>' +
+    '<option value="qf">Quarter Finals</option>' +
+    '<option value="sf">Semi Finals + Final</option>';
+
+  var html = '';
+  for (var i=1; i<=n; i++) {
+    var defDate  = baseDates[i-1] || '';
+    var defRound = defaultRounds[i-1] || 'rr'+i;
+    html += '<div style="background:var(--panel3);border-radius:8px;padding:14px;margin-bottom:8px">';
+    // Day header
+    html += '<div style="display:grid;grid-template-columns:60px 1fr 1fr 2fr;gap:10px;align-items:end;margin-bottom:12px">';
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--gold)">Day '+i+'</div>';
+    html += '<div><label class="form-label">Date</label><input type="date" class="form-input" id="fx-date-'+i+'" value="'+defDate+'"></div>';
+    html += '<div><label class="form-label">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'" value="08:00"></div>';
+    html += '<div><label class="form-label">Stage / Round</label><select class="form-select" id="fx-dayround-'+i+'">'+roundOptions+'</select></div>';
+    html += '</div>';
+    // Per-group time rows
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    letters.forEach(function(l) {
+      var defStart = l==='A'?'08:00':l==='B'?'14:00':l==='C'?'17:00':'19:00';
+      var defEnd   = l==='A'?'13:00':l==='B'?'17:00':l==='C'?'20:00':'22:00';
+      html += '<div style="display:grid;grid-template-columns:70px 1fr 1fr auto;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+      html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold)">Group '+l+'</div>';
+      html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'-'+l+'" value="'+defStart+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-end-'+i+'-'+l+'" value="'+defEnd+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div style="font-size:11px;color:var(--muted)" id="fx-slots-'+i+'-'+l+'"></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+  con.innerHTML = html;
+
+  // Set default round values
+  for (var di=1; di<=n; di++) {
+    var sel = document.getElementById('fx-dayround-'+di);
+    if (sel && defaultRounds[di-1]) sel.value = defaultRounds[di-1];
+  }
+  fxCalc();
+}
+
+function generateSchedule() {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+
+  var fmt   = document.getElementById('fx-format').value;
+  var ng    = parseInt(document.getElementById('fx-groups').value || 2);
+  var tpg   = parseInt(document.getElementById('fx-tpg').value || 5);
+  var dur   = parseInt(document.getElementById('fx-duration').value || 14);
+  var brk   = parseInt(document.getElementById('fx-break').value || 5);
+  var cts   = parseInt(document.getElementById('fx-courts').value || 2);
+  var nDays = parseInt(document.getElementById('fx-num-days').value || 3);
+  var slot  = dur + brk;
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+  var groups  = cacheGet('pitchcwc_groups') || {};
+
+  if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
+    toast('Assign teams to groups in Step 3 first','red'); return;
+  }
+
+  // Read day assignments
+  var dayAssign = {};
+  for (var d=1; d<=nDays; d++) {
+    var sel = document.getElementById('fx-dayround-'+d);
+    dayAssign[d] = sel ? sel.value : 'rr'+d;
+  }
+
+  // ── Berger round-robin ──────────────────────────────────────
+  function bergerRounds(teams) {
+    var t = teams.slice();
+    if (t.length % 2 === 1) t.push('BYE');
+    var n2 = t.length, rounds = [];
+    for (var r=0; r<n2-1; r++) {
+      var pairs = [];
+      for (var i=0; i<n2/2; i++) {
+        if (t[i]!=='BYE' && t[n2-1-i]!=='BYE')
+          pairs.push({home:t[i], away:t[n2-1-i]});
+      }
+      rounds.push(pairs);
+      t = [t[0]].concat([t[t.length-1]]).concat(t.slice(1,t.length-1));
+    }
+    return rounds;
+  }
+
+  // Build rounds per group
+  var groupRounds = {}, groupData = {};
+  letters.forEach(function(l) {
+    var gn = 'Group '+l;
+    var gd = groups[gn] || [];
+    var names = gd.map(function(t){ return typeof t==='string'?t:t.name; });
+    if (!names.length) for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gn+')');
+    // Double round robin = run berger twice
+    var rr1 = bergerRounds(names);
+    var rr2 = bergerRounds(names.slice().reverse()); // reverse for different matchups
+    groupRounds[gn] = {rr1: rr1, rr2: rr2, all: rr1.concat(rr2)};
+    groupData[gn] = gd;
+  });
+
+  // Map day type → which rounds to schedule
+  // rr1 = first set of rounds, rr2 = second set, ko = knockout
+  function getRoundsForDay(dayType, gn) {
+    var gr = groupRounds[gn];
+    if (!gr) return [];
+    if (dayType === 'rr1') return gr.rr1;
+    if (dayType === 'rr2') return gr.rr2;
+    if (dayType === 'group') return gr.all;
+    return [];
+  }
+
+  // Track slot index per group per day key
+  var daySlotIdx = {};
+
+  function makeMatch(home, away, hd, ad, gName, dayNum, grpLetter) {
+    var slotKey = grpLetter ? (dayNum+'-'+grpLetter) : String(dayNum);
+    var startEl = document.getElementById('fx-start-'+dayNum+'-'+grpLetter) ||
+                  document.getElementById('fx-start-'+dayNum);
+    var start = startEl ? startEl.value : '08:00';
+    var sPts  = start.split(':').map(Number);
+    var si    = daySlotIdx[slotKey] || 0;
+    var timeSlot = Math.floor(si/cts);
+    var pitch    = (si%cts)+1;
+    var startM   = sPts[0]*60+sPts[1] + timeSlot*slot;
+    daySlotIdx[slotKey] = si+1;
+
+    return {
+      id: Date.now()+si+(Math.floor(Math.random()*9999)),
+      group:gName, round:gName,
+      home:home, hFlag:(hd&&hd.flag)||'🔵', hCompany:(hd&&hd.company)||'',
+      away:away, aFlag:(ad&&ad.flag)||'🔴', aCompany:(ad&&ad.company)||'',
+      scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
+      day:dayNum, dayLabel:dayLabel(dayNum),
+      time:fmtMins(startM), endTime:fmtMins(startM+dur),
+      pitch:pitch, duration:dur
+    };
+  }
+
+  var allMatches = [];
+
+  // ── Schedule group stage matches per day ───────────────────
+  if (fmt !== 'knockout-only') {
+    for (var dayNum=1; dayNum<=nDays; dayNum++) {
+      var dtype = dayAssign[dayNum];
+      if (dtype === 'ko' || dtype === 'ro16' || dtype === 'qf' || dtype === 'sf') continue;
+
+      // For each round in this day, interleave groups across pitches
+      var maxRounds = 0;
+      letters.forEach(function(l) {
+        var rounds = getRoundsForDay(dtype, 'Group '+l);
+        if (rounds.length > maxRounds) maxRounds = rounds.length;
+      });
+
+      for (var ri=0; ri<maxRounds; ri++) {
+        letters.forEach(function(l) {
+          var gn = 'Group '+l;
+          var rounds = getRoundsForDay(dtype, gn);
+          var pair = rounds[ri];
+          if (!pair) return;
+          var gd = groupData[gn] || [];
+          var hd = gd.find(function(t){ return (t.name||t)===pair.home; }) || {};
+          var ad = gd.find(function(t){ return (t.name||t)===pair.away; }) || {};
+          allMatches.push(makeMatch(pair.home, pair.away, hd, ad, gn, dayNum, l));
+        });
+      }
+    }
+  }
+
+  // ── Knockout bracket ───────────────────────────────────────
+  if (fmt !== 'league') {
+    var KOR = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Final',4:'Semi Final',2:'Final'};
+    var koT = fmt==='knockout-only'
+      ? parseInt(document.getElementById('fx-ko-teams').value||32)
+      : ng*2;
+
+    // Find KO days
+    var koDays = [];
+    for (var d=1; d<=nDays; d++) {
+      var dt = dayAssign[d];
+      if (dt==='ko'||dt==='ro16'||dt==='qf'||dt==='sf') koDays.push(d);
+    }
+    if (!koDays.length) koDays = [nDays];
+
+    var koDayIdx = 0;
+    var rem = koT;
+    while (rem >= 2) {
+      var rn = KOR[rem] || 'Round of '+rem;
+      var nm = rem/2;
+      var kd = koDays[Math.min(koDayIdx, koDays.length-1)];
+      for (var mi=0; mi<nm; mi++) {
+        var slotKey2 = 'ko-'+kd;
+        var startEl2 = document.getElementById('fx-start-'+kd) || {};
+        var start2 = startEl2.value || '08:00';
+        var sPts2  = start2.split(':').map(Number);
+        var si2    = daySlotIdx[slotKey2] || 0;
+        var startM2 = sPts2[0]*60+sPts2[1] + Math.floor(si2/cts)*slot;
+        allMatches.push({
+          id: Date.now()+si2+(Math.floor(Math.random()*9999)),
+          group:rn, round:rn, isKO:true,
+          home:'TBD '+(mi*2+1), hFlag:'🔵', hCompany:'',
+          away:'TBD '+(mi*2+2), aFlag:'🔴', aCompany:'',
+          scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
+          day:kd, dayLabel:dayLabel(kd),
+          time:fmtMins(startM2), endTime:fmtMins(startM2+dur),
+          pitch:(si2%cts)+1, duration:dur
+        });
+        daySlotIdx[slotKey2] = si2+1;
+      }
+      rem = rem/2;
+      koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
+      // Small gap between rounds
+      var kd2 = koDays[Math.min(koDayIdx, koDays.length-1)];
+      var gapKey = 'ko-'+kd2;
+      daySlotIdx[gapKey] = (daySlotIdx[gapKey]||0) + cts; // add a break slot
+    }
+  }
+
+  cacheSet('pitchcwc_matches', allMatches);
+  dbClearMatches().then(function(){ dbSaveMatches(allMatches); });
+  renderFixturesAdmin();
+  populateScoreSel();
+  toast('Generated '+allMatches.length+' matches — Double Round Robin + Knockout');
+}
+
+
+// ================================================================
+// UNIVERSAL SYNC HELPER
+// Always pulls latest data from Supabase before rendering
+// ================================================================
+function syncAndRender(dataType, callback) {
+  var promise;
+  if (dataType === 'matches') {
+    promise = dbGetMatches().then(function(rows) {
+      if (rows && rows.length) cacheSet('pitchcwc_matches', rows);
+    });
+  } else if (dataType === 'groups') {
+    promise = dbGetGroups().then(function(obj) {
+      if (obj && Object.keys(obj).length) cacheSet('pitchcwc_groups', obj);
+    });
+  } else if (dataType === 'stats') {
+    promise = dbGetStats().then(function(rows) {
+      if (rows && rows.length) cacheSet('pitchcwc_stats', rows);
+    });
+  } else if (dataType === 'regs') {
+    promise = dbGetRegs().then(function(rows) {
+      if (rows && rows.length) {
+        var mapped = rows.map(function(r) {
+          return {
+            id:r.id, team:r.team||'', company:r.company||'',
+            c1:r.country1||'', country1:r.country1||'',
+            companyLogo:r.company_logo||'',
+            staffPlayers:r.staff_players||[],
+            nonStaffPlayers:r.non_staff_players||[],
+            officials:r.officials||[],
+            contactPerson:r.contact_person||'',
+            contactNo:r.contact_no||'',
+            email:r.email||'',
+            signatory:r.signatory||'',
+            sigRole:r.sig_role||'',
+            sigDate:r.sig_date||'',
+            status:r.status||'Pending',
+            submittedAt:r.submitted_at||''
+          };
+        });
+        cacheSet('pitchcwc_regs', mapped);
+      }
+    });
+  } else {
+    promise = Promise.resolve();
+  }
+
+  promise.catch(function(e) {
+    console.warn('Sync failed for '+dataType+':', e && e.message);
+  }).finally(function() {
+    // Always render, even if DB failed (uses cache)
+    if (typeof callback === 'function') callback();
+  });
+}
+// ================================================================
+// END SYNC HELPER
+// ================================================================
+
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.style.display='none');
   document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
@@ -2030,67 +3523,48 @@ function showPage(id){
   if(mob) mob.classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
   document.getElementById('navLinks').classList.remove('open');
-  if(id==='live'){renderLive();startLiveClock();}
-  if(id==='fixtures'){renderFixtures();}
-  if(id==='standings'){renderStandings();}
-  if(id==='stats'){renderStats();}
-  if(id==='teams'){renderTeams();}
-  if(id==='admin'){populateAdminMatchSel();}
+
+  // Always sync from Supabase when switching pages
+  if(id==='live'){
+    syncAndRender('matches', renderLive);
+    startLiveClock();
+  }
+  if(id==='fixtures')  syncAndRender('matches',  renderFixtures);
+  if(id==='standings') syncAndRender('groups',   renderStandings);
+  if(id==='stats')     syncAndRender('stats',    renderStats);
+  if(id==='teams')     syncAndRender('regs',     renderTeams);
+  if(id==='admin'){
+    syncAndRender('matches', function(){
+      if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
+      if(typeof renderScoresTable==='function') setTimeout(renderScoresTable, 300);
+    });
+    syncAndRender('regs', function(){/* preload regs cache */});
+    syncAndRender('groups', function(){/* preload groups cache */});
+  }
 }
 
 function toggleMenu(){document.getElementById('navLinks').classList.toggle('open')}
 
 // ===== ADMIN =====
-function openAdminModal(){document.getElementById('adminModal').classList.add('open')}
-function closeAdminModal(){document.getElementById('adminModal').classList.remove('open');document.getElementById('admin-pw').value=''}
-function checkAdmin(){
-  const pw = document.getElementById('admin-pw').value;
-  if(pw===ADMIN_PW){adminLoggedIn=true;closeAdminModal();showPage('admin');toast('✅ Admin access granted');}
-  else{toast('❌ Incorrect password','red');}
-}
 
-function saveScore(){
-  if(!adminLoggedIn){toast('❌ Not authorised','red');return;}
-  const sel = document.getElementById('admin-match-sel');
-  const m = matches.find(x=>x.id===parseInt(sel.value));
-  if(!m) return;
-  m.scoreH = parseInt(document.getElementById('admin-score-h').value)||0;
-  m.scoreA = parseInt(document.getElementById('admin-score-a').value)||0;
-  m.status = document.getElementById('admin-match-status').value;
-  m.minute = document.getElementById('admin-match-minute').value;
-  toast(`✅ Score saved: ${m.home} ${m.scoreH}–${m.scoreA} ${m.away}`);
-}
 
-function saveStat(){
-  if(!adminLoggedIn){toast('❌ Not authorised','red');return;}
-  const name = document.getElementById('stat-player').value.trim();
-  const team = document.getElementById('stat-team').value.trim();
-  const goals = parseInt(document.getElementById('stat-goals').value)||0;
-  const assists = parseInt(document.getElementById('stat-assists').value)||0;
-  const cs = parseInt(document.getElementById('stat-cs').value)||0;
-  const save = parseInt(document.getElementById('stat-save').value)||0;
-  const flag = document.getElementById('stat-flag').value||'🏴';
-  if(!name||!team){toast('❌ Enter player name and team','red');return;}
-  const existing = stats.find(s=>s.name===name);
-  if(existing){existing.goals=goals;existing.assists=assists;existing.flag=flag;}
-  else{stats.push({name,team,flag,goals,assists,cs,save,rating:goals+assists});}
-  if(cs>0||save>0){
-    const gk = keepers.find(k=>k.name===name);
-    if(gk){gk.cs=cs;gk.save=save;}
-    else{keepers.push({name,team,flag,cs,save});}
-  }
-  toast(`✅ Stats updated for ${name}`);
-}
+
+
+
 
 function saveAnnouncement(){
-  if(!adminLoggedIn){toast('❌ Not authorised','red');return;}
-  announcement = document.getElementById('admin-announce').value.trim();
-  toast('✅ Announcement published');
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  const txt = document.getElementById('admin-announce').value.trim();
+  localStorage.setItem('pitchcwc_announcement', txt);
+  dbSetSetting('announcement', txt);
+  toast('Announcement published');
 }
 
 function clearAnnouncement(){
-  announcement='';
-  document.getElementById('admin-announce').value='';
+  localStorage.removeItem('pitchcwc_announcement');
+  dbSetSetting('announcement','');
+  const el = document.getElementById('admin-announce');
+  if(el) el.value='';
   toast('Announcement cleared');
 }
 
@@ -2132,19 +3606,1048 @@ document.querySelectorAll('.fade-in').forEach(el=>observer.observe(el));
 // ===== INIT =====
 showPage('home');
 
-// Restore logo images from stored data
+// ================================================================
+// SUPABASE AUTO-PING — keeps project alive, prevents pausing
+// Pings every 4 days (Supabase pauses after 7 days of inactivity)
+// ================================================================
+function sbPing() {
+  fetch(SB_URL + '/rest/v1/settings?key=eq.ping_keep_alive', {
+    method: 'POST',
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ key: 'ping_keep_alive', value: new Date().toISOString() })
+  }).then(function() {
+    console.log('Supabase ping sent: ' + new Date().toLocaleString());
+  }).catch(function(e) {
+    console.warn('Ping failed (offline?):', e.message);
+  });
+}
+
+// Ping immediately on load
+sbPing();
+
+// Ping every 4 days (345,600,000 ms)
+setInterval(sbPing, 345600000);
+
+// Also ping when user comes back to the tab after being away
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') {
+    var lastPing = localStorage.getItem('pitchcwc_last_ping');
+    var now = Date.now();
+    // Only ping if last ping was more than 24 hours ago
+    if (!lastPing || (now - parseInt(lastPing)) > 86400000) {
+      localStorage.setItem('pitchcwc_last_ping', now);
+      sbPing();
+    }
+  }
+});
+// ================================================================
+// END AUTO-PING
+// ================================================================
+
+// ── SESSION RESTORE ────────────────────────────────────────────
+(function restoreSession(){
+  var savedRole = localStorage.getItem('pitchcwc_role');
+  if(!savedRole) return;
+
+  // Restore login state
+  adminLoggedIn = true;
+  currentRole   = savedRole;
+
+  // Hide restricted tabs for officials
+  if(savedRole === 'official'){
+    ['atab3','atab4','atab5','atab6','atab7'].forEach(function(id){
+      var t = document.getElementById(id);
+      if(t) t.style.display = 'none';
+    });
+  }
+
+  // Wait for DOM to be ready then navigate to admin
+  function goToAdmin() {
+    var rb = document.getElementById('role-badge');
+    if(rb) rb.textContent = savedRole==='admin' ? 'Admin' : 'Match Official';
+
+    // Show admin page directly
+    document.querySelectorAll('.page').forEach(function(p){ p.style.display='none'; });
+    var adminPage = document.getElementById('page-admin');
+    if(adminPage) adminPage.style.display = 'block';
+
+    // Activate first tab
+    var firstTab = savedRole==='official' ? 1 : 1;
+    var tab = document.getElementById('atab-content'+firstTab);
+    if(tab) tab.style.display = 'block';
+    var btn = document.getElementById('atab'+firstTab);
+    if(btn) btn.classList.add('active');
+
+    // Update nav
+    document.querySelectorAll('.nav-link').forEach(function(l){ l.classList.remove('active'); });
+    document.querySelectorAll('.mob-nav-btn').forEach(function(b){ b.classList.remove('active'); });
+
+    // Initialize the tab content
+    if(typeof initScoresTab === 'function') initScoresTab();
+
+    console.log('Session restored: ' + savedRole);
+  // Update nav pill
+  setTimeout(function(){ updateNavForLogin(); }, 50);
+  }
+
+  // Run after DOM is ready
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', goToAdmin);
+  } else {
+    goToAdmin();
+  }
+})();
+// ── END SESSION RESTORE ───────────────────────────────────────────────────────────────────────────
+
+// ================================================================
+// SMART PLAYER DROPDOWNS — Stats & Scores
+// ================================================================
+
+// Build a lookup of all players from approved registrations
+function getAllPlayers() {
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var players = [];
+  regs.forEach(function(reg) {
+    var flag = (reg.c1||reg.country1||'').split(' ')[0] || '🏳️';
+    var teamName = reg.team || reg.company || '';
+    var allP = [...(reg.staffPlayers||[]), ...(reg.nonStaffPlayers||[])];
+    allP.forEach(function(p) {
+      players.push({
+        name:     p.name||'',
+        jersey:   p.jersey||'',
+        position: p.position||'',
+        size:     p.size||'',
+        team:     teamName,
+        flag:     flag,
+        type:     reg.staffPlayers && reg.staffPlayers.includes(p) ? 'Staff' : 'Import'
+      });
+    });
+  });
+  return players;
+}
+
+function getTeams() {
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  return regs.map(function(r){ return {name:r.team||r.company, flag:(r.c1||r.country1||'').split(' ')[0]||'🏳️'}; });
+}
+
+// ── STATS TAB ─────────────────────────────────────────────────
+function initStatDropdowns() {
+  var teamSel = document.getElementById('stat-team-sel');
+  if (!teamSel) return;
+  // Load from DB first
+  dbGetRegs().then(function(rows){
+    if(rows&&rows.length){
+      var mapped=rows.map(function(r){
+        return {id:r.id,team:r.team,company:r.company,c1:r.country1,country1:r.country1,
+          companyLogo:r.company_logo||'',staffPlayers:r.staff_players||[],
+          nonStaffPlayers:r.non_staff_players||[],status:r.status};
+      });
+      cacheSet('pitchcwc_regs',mapped);
+    }
+    _buildStatTeamDropdown();
+  }).catch(function(){ _buildStatTeamDropdown(); });
+}
+
+function _buildStatTeamDropdown() {
+  var teamSel = document.getElementById('stat-team-sel');
+  if (!teamSel) return;
+  var teams = getTeams();
+  teamSel.innerHTML = '<option value="">— Select team —</option>' +
+    teams.map(function(t){
+      return '<option value="'+t.name+'">'+t.flag+' '+t.name+'</option>';
+    }).join('');
+}
+
+function statTeamChanged() {
+  var teamVal  = document.getElementById('stat-team-sel').value;
+  var playerSel = document.getElementById('stat-player-sel');
+  var saveBtn   = document.getElementById('stat-save-btn');
+  var info      = document.getElementById('stat-player-info');
+
+  // Reset
+  playerSel.innerHTML = '<option value="">— Select player —</option>';
+  playerSel.disabled  = !teamVal;
+  if (saveBtn) { saveBtn.disabled=true; saveBtn.style.opacity='.5'; }
+  if (info) info.style.display = 'none';
+
+  if (!teamVal) return;
+
+  var all = getAllPlayers().filter(function(p){ return p.team===teamVal; });
+  playerSel.innerHTML = '<option value="">— Select player —</option>' +
+    all.map(function(p){
+      return '<option value="'+p.name+'">#'+p.jersey+' '+p.name+' ('+p.position+')</option>';
+    }).join('');
+
+  // Set hidden team field
+  var tf = document.getElementById('stat-team');
+  if(tf) tf.value = teamVal;
+}
+
+function statPlayerChanged() {
+  var teamVal    = document.getElementById('stat-team-sel').value;
+  var playerName = document.getElementById('stat-player-sel').value;
+  var saveBtn    = document.getElementById('stat-save-btn');
+  var info       = document.getElementById('stat-player-info');
+
+  var pf = document.getElementById('stat-player');
+  if(pf) pf.value = playerName;
+
+  if (!playerName) {
+    if(saveBtn){saveBtn.disabled=true;saveBtn.style.opacity='.5';}
+    if(info) info.style.display='none';
+    return;
+  }
+
+  var all    = getAllPlayers();
+  var player = all.find(function(p){ return p.name===playerName && p.team===teamVal; });
+  if (!player) return;
+
+  // Auto-fill hidden fields
+  var ff = document.getElementById('stat-flag');
+  if(ff) ff.value = player.flag;
+
+  // Show info card
+  var jd = document.getElementById('stat-jersey-display');
+  var pd = document.getElementById('stat-pos-display');
+  var fd = document.getElementById('stat-flag-display');
+  if(jd) jd.textContent = '#'+player.jersey;
+  if(pd) pd.textContent = player.position;
+  if(fd) fd.textContent = player.flag;
+  if(info) info.style.display = 'block';
+
+  // Load existing stats if any
+  var existing = (cacheGet('pitchcwc_stats')||[]).find(function(s){ return s.name===playerName; });
+  if(existing) {
+    var g = document.getElementById('stat-goals');    if(g) g.value = existing.goals||0;
+    var a = document.getElementById('stat-assists');  if(a) a.value = existing.assists||0;
+    var c = document.getElementById('stat-cs');       if(c) c.value = existing.cs||0;
+    var sv= document.getElementById('stat-save');     if(sv) sv.value = existing.save_pct||existing.save||0;
+  } else {
+    var g2=document.getElementById('stat-goals');    if(g2) g2.value=0;
+    var a2=document.getElementById('stat-assists');  if(a2) a2.value=0;
+    var c2=document.getElementById('stat-cs');       if(c2) c2.value=0;
+    var sv2=document.getElementById('stat-save');    if(sv2) sv2.value=0;
+  }
+
+  if(saveBtn){saveBtn.disabled=false;saveBtn.style.opacity='1';}
+}
+
+// ── SCORES TAB — Goalscorer dropdowns ─────────────────────────
+function scorerTeamChanged() {
+  var side      = document.getElementById('scorer-side').value;
+  var playerSel = document.getElementById('scorer-player-sel');
+  var addBtn    = document.getElementById('add-scorer-btn');
+  var info      = document.getElementById('scorer-player-info');
+
+  playerSel.innerHTML = '<option value="">— Select player —</option>';
+  playerSel.disabled  = !side;
+  if(addBtn){addBtn.disabled=true;addBtn.style.opacity='.5';}
+  if(info) info.style.display='none';
+  document.getElementById('scorer-name').value = '';
+
+  if (!side) return;
+
+  // Get team name from the current match
+  var matchSel = document.getElementById('admin-match-sel');
+  if (!matchSel || !matchSel.value) {
+    playerSel.innerHTML = '<option value="">— Select a match first —</option>';
+    return;
+  }
+
+  var matches  = cacheGet('pitchcwc_matches')||[];
+  var match    = matches.find(function(m){ return String(m.id)===String(matchSel.value); });
+  if (!match) return;
+
+  var teamName = side==='home' ? match.home : match.away;
+
+  // Get players from that team
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var reg  = regs.find(function(r){ return r.team===teamName || r.company===teamName; });
+
+  if (!reg) {
+    // No registration found — allow manual entry
+    playerSel.innerHTML = '<option value="__manual__">Enter manually...</option>';
+    playerSel.disabled = false;
+    return;
+  }
+
+  var allP = [...(reg.staffPlayers||[]),...(reg.nonStaffPlayers||[])];
+  playerSel.disabled = false;
+  playerSel.innerHTML = '<option value="">— Select player —</option>' +
+    allP.map(function(p){
+      return '<option value="'+p.name+'">#'+p.jersey+' '+p.name+' ('+p.position+')</option>';
+    }).join('') +
+    '<option value="__manual__">✏️ Enter manually...</option>';
+}
+
+function scorerPlayerChanged() {
+  var sel    = document.getElementById('scorer-player-sel');
+  var val    = sel ? sel.value : '';
+  var info   = document.getElementById('scorer-player-info');
+  var addBtn = document.getElementById('add-scorer-btn');
+  var nameHidden = document.getElementById('scorer-name');
+
+  if (!val || val==='__manual__') {
+    if(info) info.style.display='none';
+    if(nameHidden) nameHidden.value='';
+    // For manual — show a text input
+    if(val==='__manual__') {
+      var manual = document.getElementById('scorer-manual-input');
+      if(!manual) {
+        var div = document.createElement('div');
+        div.style.marginTop='8px';
+        div.innerHTML = '<label class="form-label">Player Name / Jersey #</label><input type="text" class="form-input" id="scorer-manual-input" placeholder="e.g. Haziq or #10">';
+        sel.parentNode.appendChild(div);
+        document.getElementById('scorer-manual-input').addEventListener('input', function(){
+          if(nameHidden) nameHidden.value = this.value;
+          if(addBtn && this.value.trim()){addBtn.disabled=false;addBtn.style.opacity='1';}
+          else if(addBtn){addBtn.disabled=true;addBtn.style.opacity='.5';}
+        });
+      }
+      document.getElementById('scorer-manual-input').style.display='block';
+    }
+    return;
+  }
+
+  // Hide manual input if switching back
+  var manual = document.getElementById('scorer-manual-input');
+  if(manual) manual.style.display='none';
+
+  if(nameHidden) nameHidden.value = val;
+
+  // Find player details
+  var side = document.getElementById('scorer-side').value;
+  var matchSel = document.getElementById('admin-match-sel');
+  var matches  = cacheGet('pitchcwc_matches')||[];
+  var match    = matches.find(function(m){ return String(m.id)===String(matchSel.value); });
+  if(!match) return;
+
+  var teamName = side==='home' ? match.home : match.away;
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var reg  = regs.find(function(r){ return r.team===teamName || r.company===teamName; });
+  if(!reg) return;
+
+  var allP = [...(reg.staffPlayers||[]),...(reg.nonStaffPlayers||[])];
+  var player = allP.find(function(p){ return p.name===val; });
+  if(!player) return;
+
+  // Show info
+  var jd = document.getElementById('scorer-jersey-display');
+  var nd = document.getElementById('scorer-name-display');
+  var pd = document.getElementById('scorer-pos-display');
+  if(jd) jd.textContent = '#'+player.jersey;
+  if(nd) nd.textContent = player.name;
+  if(pd) pd.textContent = player.position;
+  if(info) info.style.display='block';
+
+  if(addBtn){addBtn.disabled=false;addBtn.style.opacity='1';}
+}
+
+
+// ================================================================
+// END SMART DROPDOWNS
+// ================================================================
+
+// ================================================================
+// SCORES & STATS EDIT TABLES
+// ================================================================
+
+function refreshScoresTable() {
+  dbGetMatches().then(function(rows){
+    if(rows&&rows.length) cacheSet('pitchcwc_matches', rows);
+    renderScoresTable();
+  }).catch(function(){ renderScoresTable(); });
+}
+
+function renderScoresTable() {
+  var el = document.getElementById('scores-table');
+  if (!el) return;
+  var matches = cacheGet('pitchcwc_matches')||[];
+  if (!matches.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No matches yet — generate fixtures first.</div>';
+    return;
+  }
+  // Summary totals
+  var total = matches.length;
+  var live  = matches.filter(function(m){return m.status==='live';}).length;
+  var ft    = matches.filter(function(m){return m.status==='ft';}).length;
+  var upcoming = matches.filter(function(m){return m.status==='upcoming';}).length;
+  var totalGoals = matches.reduce(function(s,m){return s+(m.scoreH||0)+(m.scoreA||0);},0);
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  [['Total Matches',total,'var(--white)'],['Live',live,'#E74C3C'],['Full Time',ft,'#2ECC71'],['Total Goals',totalGoals,'var(--gold)']].forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:10px 14px;text-align:center">'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:26px;font-weight:900;color:'+s[2]+'">'+s[1]+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px">'+s[0]+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  // Group by day
+  var byDay = {};
+  matches.forEach(function(m){
+    var k='Day '+(m.day||1)+' — '+(m.dayLabel||'');
+    if(!byDay[k]) byDay[k]=[];
+    byDay[k].push(m);
+  });
+
+  Object.entries(byDay).forEach(function(e){
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px">'+e[0]+'</div>';
+    html += '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;min-width:560px">';
+    html += '<thead><tr style="background:var(--panel3)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Match</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:80px">Score</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:70px">Status</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Scorers</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:110px">Actions</th>'
+      +'</tr></thead><tbody>';
+
+    e[1].forEach(function(m){
+      var sc = m.status==='live'?'color:#E74C3C':m.status==='ft'?'color:#2ECC71':'color:var(--muted)';
+      var sl = m.status==='live'?'🔴 LIVE':m.status==='ft'?'✅ FT':'🕐 TBD';
+      var score = m.status==='upcoming'?'—':((m.scoreH||0)+' : '+(m.scoreA||0));
+      var scorers = (m.scorers||[]).map(function(s){
+        return '<span style="font-size:11px;background:rgba(201,162,39,.1);border-radius:3px;padding:1px 5px;margin:1px;display:inline-block">'+s.minute+'\' '+s.name+'</span>';
+      }).join('');
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'
+        +'<td style="padding:9px 10px">'
+          +'<div style="font-size:11px;color:var(--muted)">'+m.group+' · P'+(m.pitch||1)+' · '+m.time+'</div>'
+          +'<div style="font-size:13px;color:var(--white);font-weight:600;margin-top:2px">'+m.home+' <span style="color:var(--dim)">vs</span> '+m.away+'</div>'
+        +'</td>'
+        +'<td style="padding:9px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:20px;font-weight:900;color:var(--white)">'+score+'</td>'
+        +'<td style="padding:9px 10px;text-align:center;font-size:12px;font-weight:700;'+sc+'">'+sl+'</td>'
+        +'<td style="padding:9px 10px;font-size:11px">'+scorers+'</td>'
+        +'<td style="padding:9px 10px;text-align:center">'
+          +'<div style="display:flex;gap:5px;justify-content:center">'
+          +'<button onclick="quickEditMatch(\''+m.id+'\')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">✏️ Edit</button>'
+          +'<button onclick="deleteMatch(\''+m.id+'\')" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">🗑️</button>'
+          +'</div>'
+        +'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  el.innerHTML = html;
+}
+
+function quickEditMatch(matchId) {
+  // Switch to score edit and select this match
+  var sel = document.getElementById('admin-match-sel');
+  if (!sel) return;
+  // Set the value
+  sel.value = matchId;
+  // Trigger load
+  loadMatchForEdit();
+  // Scroll to top of tab
+  var tab = document.getElementById('atab-content1');
+  if (tab) tab.scrollIntoView({behavior:'smooth', block:'start'});
+  toast('Editing match — update score above');
+}
+
+function refreshStatsTable() {
+  dbGetStats().then(function(rows){
+    if(rows&&rows.length) cacheSet('pitchcwc_stats', rows);
+    renderStatsTable();
+  }).catch(function(){ renderStatsTable(); });
+}
+
+function renderStatsTable() {
+  var el = document.getElementById('stats-table');
+  if (!el) return;
+  var stats = cacheGet('pitchcwc_stats')||[];
+  if (!stats.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No stats yet — save player stats above to see them here.</div>';
+    return;
+  }
+  var sorted = stats.slice().sort(function(a,b){return (b.goals||0)-(a.goals||0);});
+
+  // Totals
+  var totalGoals   = stats.reduce(function(s,p){return s+(p.goals||0);},0);
+  var totalAssists = stats.reduce(function(s,p){return s+(p.assists||0);},0);
+  var topScorer    = sorted[0];
+  var topAssist    = stats.slice().sort(function(a,b){return (b.assists||0)-(a.assists||0);})[0];
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  [
+    ['Players Tracked', stats.length, 'var(--white)'],
+    ['Total Goals', totalGoals, 'var(--gold)'],
+    ['Total Assists', totalAssists, 'var(--muted)'],
+    ['Top Scorer', topScorer?(topScorer.goals+'g — '+topScorer.name.split(' ')[0]):'—', '#2ECC71']
+  ].forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:10px 14px;text-align:center">'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:'+(s[0]==='Top Scorer'?'14':'24')+'px;font-weight:900;color:'+s[2]+';line-height:1.2">'+s[1]+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:3px">'+s[0]+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  html += '<table style="width:100%;border-collapse:collapse;min-width:520px">';
+  html += '<thead><tr style="background:var(--panel3)">'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:36px">#</th>'
+    +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Player</th>'
+    +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Team</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">G</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">A</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">CS</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:55px">Sv%</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:110px">Actions</th>'
+    +'</tr></thead><tbody>';
+
+  sorted.forEach(function(p, i){
+    var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:900;color:var(--gold)">'+medal+(medal?'':'#'+(i+1))+'</td>'
+      +'<td style="padding:8px 10px;font-size:13px;color:var(--white);font-weight:600">'+(p.flag||'')+'&nbsp;'+p.name+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;color:var(--muted)">'+p.team+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--white)">'+(p.goals||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:700;color:var(--muted)">'+(p.assists||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted)">'+(p.cs||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted)">'+(p.save_pct||p.save||0)+'%</td>'
+      +'<td style="padding:8px 10px;text-align:center">'
+        +'<div style="display:flex;gap:5px;justify-content:center">'
+        +'<button onclick="quickEditStat(\''+p.name.replace(/\'/g,"\\'")+'\')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">✏️ Edit</button>'
+        +'<button onclick="deleteStat(\''+p.name.replace(/\'/g,"\\'")+'\',\''+p.team.replace(/\'/g,"\\'")+'\' )" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">🗑️</button>'
+        +'</div>'
+      +'</td>'
+      +'</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function quickEditStat(playerName) {
+  // Find the player's team and pre-select in the dropdowns
+  var stats = cacheGet('pitchcwc_stats')||[];
+  var p = stats.find(function(s){ return s.name===playerName; });
+  if (!p) return;
+
+  // Set team dropdown
+  var teamSel = document.getElementById('stat-team-sel');
+  if (teamSel) {
+    teamSel.value = p.team;
+    statTeamChanged();
+    // Then set player
+    setTimeout(function(){
+      var playerSel = document.getElementById('stat-player-sel');
+      if (playerSel) {
+        playerSel.value = playerName;
+        statPlayerChanged();
+      }
+    }, 100);
+  }
+  // Scroll to top of stats tab
+  var tab = document.getElementById('atab-content2');
+  if (tab) tab.scrollIntoView({behavior:'smooth', block:'start'});
+  toast('Editing '+playerName+' — update stats above');
+}
+
+// Auto-render tables when tabs open (already handled in adminTab n===1 and n===2)
+// Also render on init
+function initScoresTab() {
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  refreshScoresTable();
+
+  if(typeof populateTourneySelectors==="function") populateTourneySelectors();
+}
+function initStatsTab() {
+  initStatDropdowns();
+  refreshStatsTable();
+
+  if(typeof populateTourneySelectors==="function") populateTourneySelectors();
+}
+// ================================================================
+// END SCORES & STATS EDIT TABLES
+// ================================================================
+
+// ── DELETE FUNCTIONS ──────────────────────────────────────────
+function deleteMatch(matchId) {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  if (!confirm('Delete this match? This cannot be undone.')) return;
+  var matches = (cacheGet('pitchcwc_matches')||[]).filter(function(m){ return String(m.id)!==String(matchId); });
+  cacheSet('pitchcwc_matches', matches);
+  // Delete from Supabase
+  dbClearMatches().then(function(){
+    if(matches.length) dbSaveMatches(matches);
+  });
+  renderScoresTable();
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  toast('Match deleted');
+}
+
+function deleteStat(playerName, teamName) {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  if (!confirm('Delete stats for '+playerName+'?')) return;
+  var stats = (cacheGet('pitchcwc_stats')||[]).filter(function(s){ return s.name!==playerName; });
+  cacheSet('pitchcwc_stats', stats);
+  var keepers = (cacheGet('pitchcwc_keepers')||[]).filter(function(k){ return k.name!==playerName; });
+  cacheSet('pitchcwc_keepers', keepers);
+  // Delete from Supabase — upsert with 0 stats or remove
+  sbFetch('player_stats?name=eq.'+encodeURIComponent(playerName), {method:'DELETE'});
+  renderStatsTable();
+  toast('Stats deleted for '+playerName);
+}
+
+function addNewMatch() {
+  // Open the manual match section in fixtures tab
+  adminTab(5);
+  var manual = document.getElementById('manual-add-section') || document.getElementById('manual-wrap');
+  if(manual) { manual.style.display='block'; manual.scrollIntoView({behavior:'smooth'}); }
+  toast('Go to Fixtures tab → Manual Match to add');
+}
+// ── END DELETE FUNCTIONS ──────────────────────────────────────
+
+// ================================================================
+// USER MENU
+// ================================================================
+function updateNavForLogin() {
+  var loginBtn  = document.getElementById('nav-login-btn');
+  var userPill  = document.getElementById('nav-user-pill');
+  var roleLabel = document.getElementById('nav-role-label');
+  var roleIcon  = document.getElementById('nav-role-icon');
+  var dropName  = document.getElementById('dropdown-role-name');
+
+  if (adminLoggedIn) {
+    if (loginBtn)  loginBtn.style.display  = 'none';
+    if (userPill)  userPill.style.display  = 'block';
+    var label = currentRole === 'admin' ? 'Admin' : 'Match Official';
+    var icon  = currentRole === 'admin' ? '⚙️' : '⚽';
+    if (roleLabel) roleLabel.textContent = label;
+    if (roleIcon)  roleIcon.textContent  = icon;
+    if (dropName)  dropName.textContent  = label;
+    // Hide official-only items
+    var regsBtn = document.getElementById('dd-regs-btn');
+    var fxBtn   = document.getElementById('dd-fx-btn');
+    var stBtn   = document.getElementById('dd-stats-btn');
+    if (currentRole === 'official') {
+      if (regsBtn) regsBtn.style.display = 'none';
+      if (fxBtn)   fxBtn.style.display   = 'none';
+    } else {
+      if (regsBtn) regsBtn.style.display = 'flex';
+      if (fxBtn)   fxBtn.style.display   = 'flex';
+    }
+  } else {
+    if (loginBtn)  loginBtn.style.display  = 'block';
+    if (userPill)  userPill.style.display  = 'none';
+    closeUserMenu();
+  }
+}
+
+function toggleUserMenu() {
+  var dd = document.getElementById('user-dropdown');
+  if (!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeUserMenu() {
+  var dd = document.getElementById('user-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  var area = document.getElementById('nav-user-area');
+  if (area && !area.contains(e.target)) closeUserMenu();
+});
+
+// Quick nav helpers
+function goToScores()        { showPage('admin'); adminTab(1); closeUserMenu(); }
+function goToStats()         { showPage('admin'); adminTab(2); closeUserMenu(); }
+function goToRegistrations() { showPage('admin'); adminTab(3); closeUserMenu(); }
+function goToFixtures()      { showPage('admin'); adminTab(5); closeUserMenu(); }
+
+// Hook into doLogin / doLogout / restoreSession to update nav
+
+
+
+
+// Update nav on page load if session restored
+document.addEventListener('DOMContentLoaded', function() {
+  updateNavForLogin();
+});
+// Also call immediately in case DOM is already ready
+updateNavForLogin();
+// ================================================================
+// END USER MENU
+// ================================================================
+
+function genKO(){ generateKnockoutBracket(); }
+
+// ================================================================
+// FIXTURE BUILDER — FORMAT CARDS + BREAKDOWN + SAVED TOURNAMENTS
+// ================================================================
+
+// ── Format card selection ─────────────────────────────────────
+function fxSelectFormat(fmt) {
+  document.getElementById('fx-format').value = fmt;
+  // Update card styles
+  ['group-knockout','league','knockout-only'].forEach(function(f){
+    var c = document.getElementById('fcard-'+f);
+    if(c) {
+      c.style.border = f===fmt ? '2px solid var(--gold)' : '2px solid rgba(255,255,255,.08)';
+      c.style.background = f===fmt ? 'rgba(201,162,39,.06)' : 'transparent';
+    }
+  });
+  // Show/hide settings
+  var gs = document.getElementById('fx-group-settings');
+  var kw = document.getElementById('fx-ko-only-wrap');
+  var aw = document.getElementById('fx-advance-wrap');
+  if(gs) gs.style.display = fmt==='knockout-only' ? 'none' : 'grid';
+  if(kw) kw.style.display = fmt==='knockout-only' ? 'block' : 'none';
+  if(aw) aw.style.display = fmt==='league' ? 'none' : 'block';
+  fxUpdateBreakdown();
+  fxBuildDayRows();
+}
+
+// ── Visual breakdown (Score7 style) ──────────────────────────
+function fxUpdateBreakdown() {
+  var el = document.getElementById('fx-breakdown');
+  if(!el) return;
+  var fmt  = document.getElementById('fx-format').value;
+  var ng   = parseInt(document.getElementById('fx-groups').value||2);
+  var tpg  = parseInt(document.getElementById('fx-tpg').value||5);
+  var adv  = parseInt((document.getElementById('fx-advance')||{value:'2'}).value||2);
+  var koT  = parseInt((document.getElementById('fx-ko-teams')||{value:'8'}).value||8);
+  var dur  = parseInt((document.getElementById('fx-duration')||{value:'14'}).value||14);
+  var brk  = parseInt((document.getElementById('fx-break')||{value:'5'}).value||5);
+  var cts  = parseInt((document.getElementById('fx-courts')||{value:'2'}).value||2);
+
+  var totalTeams, groupMatches, koMatches, totalMatches, stages;
+
+  if(fmt==='group-knockout') {
+    totalTeams   = ng * tpg;
+    // Double round robin: n*(n-1) matches per group * 2
+    var matchPerGroup = tpg*(tpg-1);
+    groupMatches = ng * matchPerGroup;
+    var koTeams  = ng * adv;
+    koMatches    = koTeams > 1 ? koTeams - 1 : 0;
+    totalMatches = groupMatches + koMatches;
+    stages = [
+      {label:'Group Stage',    matches:groupMatches, icon:'📋', detail:ng+' groups × '+tpg+' teams, double RR'},
+      {label:'Knockout Stage', matches:koMatches,    icon:'⚡', detail:koTeams+' teams advance, '+koRounds(koTeams)+' rounds'},
+      {label:'Total',          matches:totalMatches, icon:'🏆', detail:Math.ceil(totalMatches/(cts))+' time slots needed'},
+    ];
+  } else if(fmt==='league') {
+    totalTeams   = ng * tpg;
+    var matchPerGroup2 = tpg*(tpg-1);
+    totalMatches = ng * matchPerGroup2;
+    groupMatches = totalMatches;
+    koMatches    = 0;
+    stages = [
+      {label:'Round Robin',    matches:groupMatches, icon:'📊', detail:'Every team plays every other team twice'},
+      {label:'No Knockout',    matches:0,            icon:'—',  detail:'Final standings determine winner'},
+      {label:'Total',          matches:totalMatches, icon:'🏆', detail:totalTeams+' teams, '+Math.ceil(totalMatches/cts)+' slots needed'},
+    ];
+  } else {
+    totalTeams   = koT;
+    koMatches    = koT - 1;
+    totalMatches = koMatches;
+    stages = [
+      {label:'Knockout Only',  matches:koMatches,    icon:'⚡', detail:koRounds(koT)+' rounds, single elimination'},
+      {label:'Total Teams',    matches:koT,          icon:'👥', detail:'Winner-takes-all format'},
+      {label:'Total Matches',  matches:totalMatches, icon:'🏆', detail:Math.ceil(totalMatches/cts)+' slots needed'},
+    ];
+  }
+
+  // Time estimate
+  var slotMins = dur + brk;
+  var totalSlots = Math.ceil(totalMatches / cts);
+  var totalMins  = totalSlots * slotMins;
+  var hours = Math.floor(totalMins/60);
+  var mins  = totalMins % 60;
+  var timeStr = hours > 0 ? hours+'h '+(mins>0?mins+'m':'') : mins+'m';
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">';
+  stages.forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:12px 14px;text-align:center">'
+      +'<div style="font-size:22px;margin-bottom:4px">'+s.icon+'</div>'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:28px;font-weight:900;color:var(--gold)">'+s.matches+'</div>'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:var(--white);text-transform:uppercase;margin:2px 0">'+s.label+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);line-height:1.4">'+s.detail+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  // Stage flow diagram
+  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 14px;background:var(--panel2);border-radius:7px;margin-bottom:10px">';
+  if(fmt==='group-knockout') {
+    for(var g=0;g<ng;g++){
+      html += '<div style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:var(--gold)">Group '+String.fromCharCode(65+g)+'</div>';
+      if(g<ng-1) html += '<span style="color:var(--dim);font-size:11px">+</span>';
+    }
+    html += '<span style="color:var(--dim);font-size:16px;margin:0 4px">→</span>';
+    var koT2 = ng*adv;
+    var rem = koT2;
+    while(rem>=2){
+      html += '<div style="background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:#2ECC71">'+(rem===2?'Final':rem===4?'Semi Finals':rem===8?'Quarter Finals':'Round of '+rem)+'</div>';
+      if(rem>2) html += '<span style="color:var(--dim);font-size:16px;margin:0 2px">→</span>';
+      rem = rem/2;
+    }
+  } else if(fmt==='league') {
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:700;color:var(--white)">All '+totalTeams+' teams play every other team twice → Final Standings</div>';
+  } else {
+    var rem2 = koT;
+    while(rem2>=2){
+      html += '<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:#E74C3C">'+(rem2===2?'Final':rem2===4?'Semi Finals':rem2===8?'Quarter Finals':'Round of '+rem2)+'</div>';
+      if(rem2>2) html += '<span style="color:var(--dim);font-size:16px;margin:0 2px">→</span>';
+      rem2 = rem2/2;
+    }
+  }
+  html += '</div>';
+
+  // Time + teams summary bar
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'
+    +'<span>👥 <strong style="color:var(--white)">'+(totalTeams||koT)+' Teams</strong></span>'
+    +'<span>⚽ <strong style="color:var(--white)">'+totalMatches+' Matches</strong></span>'
+    +'<span>⏱️ <strong style="color:var(--white)">'+dur+'min</strong> per match</span>'
+    +'<span>🏟️ <strong style="color:var(--white)">'+cts+'</strong> Pitch'+(cts>1?'es':'')+' running parallel</span>'
+    +'<span>🕐 ~<strong style="color:var(--gold)">'+timeStr+'</strong> total play time</span>'
+    +'</div>';
+
+  el.innerHTML = html;
+}
+
+function koRounds(n) {
+  var rounds = 0;
+  while(n>1){ rounds++; n=Math.floor(n/2); }
+  return rounds;
+}
+
+// ── Override fxFormatChange to update breakdown ───────────────
+
+
+// ── SAVED TOURNAMENTS ─────────────────────────────────────────
+function fxSaveTournament() {
+  var name = (document.getElementById('fx-tourney-name').value||'').trim();
+  if(!name){ toast('Enter a tournament name first','red'); return; }
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var idx = saved.findIndex(function(t){ return t.name===name; });
+  var entry = {
+    name: name,
+    savedAt: new Date().toLocaleString(),
+    format:  (document.getElementById('fx-format')||{}).value||'group-knockout',
+    groups:  (document.getElementById('fx-groups')||{}).value||'2',
+    tpg:     (document.getElementById('fx-tpg')||{}).value||'5',
+    advance: (document.getElementById('fx-advance')||{}).value||'2',
+    duration:(document.getElementById('fx-duration')||{}).value||'14',
+    brk:     (document.getElementById('fx-break')||{}).value||'5',
+    courts:  (document.getElementById('fx-courts')||{}).value||'2',
+    numDays: (document.getElementById('fx-num-days')||{}).value||'3',
+    groupData: cacheGet('pitchcwc_groups')||{},
+    matches:   cacheGet('pitchcwc_matches')||[],
+  };
+  if(idx!==-1) saved[idx]=entry; else saved.unshift(entry);
+  localStorage.setItem('pitchcwc_tournaments', JSON.stringify(saved));
+  toast('Tournament "'+name+'" saved ✅');
+}
+
+function fxShowSaved() {
+  var panel = document.getElementById('fx-saved-panel');
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+  fxRenderSavedList();
+}
+
+function fxRenderSavedList() {
+  var el = document.getElementById('fx-saved-list');
+  if(!el) return;
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  if(!saved.length){
+    el.innerHTML='<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No saved tournaments yet.</div>';
+    return;
+  }
+  el.innerHTML = saved.map(function(t,i){
+    var fmt = t.format==='group-knockout'?'🏆 Group+KO':t.format==='league'?'📊 League':'⚡ Knockout';
+    var info = t.groups+'g × '+t.tpg+' teams · '+t.courts+' pitches · '+(t.matches||[]).length+' matches';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--panel3);border-radius:7px;margin-bottom:8px;gap:10px;flex-wrap:wrap">'
+      +'<div>'
+        +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:900;color:var(--white);margin-bottom:2px">'+t.name+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+fmt+' · '+info+'</div>'
+        +'<div style="font-size:10px;color:var(--dim);margin-top:2px">Saved: '+t.savedAt+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px">'
+        +'<button onclick="fxLoadTournament('+i+')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:6px 14px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">📂 Load</button>'
+        +'<button onclick="fxDeleteTournament('+i+')" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:6px 10px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function fxLoadTournament(idx) {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t) return;
+  // Load all settings
+  var set = function(id,v){ var el=document.getElementById(id); if(el) el.value=v; };
+  document.getElementById('fx-tourney-name').value = t.name;
+  set('fx-groups', t.groups);
+  set('fx-tpg', t.tpg);
+  set('fx-advance', t.advance||'2');
+  set('fx-duration', t.duration||'14');
+  set('fx-break', t.brk||'5');
+  set('fx-courts', t.courts||'2');
+  set('fx-num-days', t.numDays||'3');
+  // Restore groups and matches
+  if(t.groupData && Object.keys(t.groupData).length){
+    cacheSet('pitchcwc_groups', t.groupData);
+  }
+  if(t.matches && t.matches.length){
+    cacheSet('pitchcwc_matches', t.matches);
+  }
+  // Restore format card
+  fxSelectFormat(t.format||'group-knockout');
+  fxBuildDayRows();
+  if(typeof renderFixturesAdmin==='function') renderFixturesAdmin();
+  if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
+  // Hide panel
+  var panel=document.getElementById('fx-saved-panel');
+  if(panel) panel.style.display='none';
+  toast('Loaded: '+t.name);
+}
+
+function fxDeleteTournament(idx) {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  if(!confirm('Delete "'+saved[idx].name+'"?')) return;
+  saved.splice(idx,1);
+  localStorage.setItem('pitchcwc_tournaments', JSON.stringify(saved));
+  fxRenderSavedList();
+  toast('Tournament deleted');
+}
+
+function fxNewTournament() {
+  if(!confirm('Start a new tournament? Unsaved changes will be lost.')) return;
+  document.getElementById('fx-tourney-name').value='';
+  fxSelectFormat('group-knockout');
+  var set=function(id,v){var el=document.getElementById(id);if(el)el.value=v;};
+  set('fx-groups','2');set('fx-tpg','5');set('fx-duration','14');
+  set('fx-break','5');set('fx-courts','2');set('fx-num-days','3');
+  fxBuildDayRows();
+  toast('New tournament started');
+}
+
+function toggleManual() {
+  var el = document.getElementById('manual-add-section');
+  if(el) el.style.display = el.style.display==='none'?'block':'none';
+}
+
+// Init breakdown on fixture tab load
+
+// ================================================================
+// END FIXTURE BUILDER EXTRAS
+// ================================================================
+
+// ================================================================
+// FIXTURE BUILDER EXTRAS: TOURNEY SELECTORS + PUBLISH
+// ================================================================
+
+// Populate tourney dropdowns from saved list
+function populateTourneySelectors() {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var opts = '<option value="current">Current / Active Tournament</option>' +
+    saved.map(function(t,i){
+      return '<option value="saved_'+i+'">'+t.name+'</option>';
+    }).join('');
+  ['scores-tourney-sel','stats-tourney-sel'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.innerHTML = opts;
+  });
+}
+
+function scoresTourneyChanged() {
+  var val = document.getElementById('scores-tourney-sel').value;
+  if(val==='current'){
+    // Use active cache
+    populateAdminMatchSel ? populateAdminMatchSel() : null;
+    refreshScoresTable ? refreshScoresTable() : null;
+    return;
+  }
+  // Load from saved tournament
+  var idx = parseInt(val.replace('saved_',''));
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t || !t.matches) return;
+  cacheSet('pitchcwc_matches', t.matches);
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  refreshScoresTable ? refreshScoresTable() : null;
+  toast('Showing matches from: '+t.name);
+}
+
+function statsTourneyChanged() {
+  var val = document.getElementById('stats-tourney-sel').value;
+  if(val==='current'){
+    initStatDropdowns ? initStatDropdowns() : null;
+    refreshStatsTable ? refreshStatsTable() : null;
+    return;
+  }
+  var idx = parseInt(val.replace('saved_',''));
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t) return;
+  // Load group data so player lists are available
+  if(t.groupData) cacheSet('pitchcwc_groups', t.groupData);
+  initStatDropdowns ? initStatDropdowns() : null;
+  refreshStatsTable ? refreshStatsTable() : null;
+  toast('Showing stats context for: '+t.name);
+}
+
+// Publish fixtures to website (saves to Supabase so public pages update)
+function fxPublishFixtures() {
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  var matches = cacheGet('pitchcwc_matches')||[];
+  var groups  = cacheGet('pitchcwc_groups')||{};
+  if(!matches.length && !Object.keys(groups).length){
+    toast('Nothing to publish — generate fixtures first','red'); return;
+  }
+  var statusEl = document.getElementById('fx-publish-status');
+  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing...'; }
+
+  var tasks = [];
+  // Push matches
+  if(matches.length){
+    tasks.push(dbClearMatches().then(function(){ return dbSaveMatches(matches); }));
+  }
+  // Push groups
+  Object.keys(groups).forEach(function(gn){
+    tasks.push(dbSaveGroup(gn, groups[gn]));
+  });
+
+  Promise.all(tasks).then(function(){
+    if(statusEl){
+      statusEl.textContent = '✅ Published! '+matches.length+' matches and '+Object.keys(groups).length+' groups are now live on the website.';
+      statusEl.style.color = '#2ECC71';
+    }
+    toast('✅ Fixtures published to website!');
+  }).catch(function(e){
+    if(statusEl){
+      statusEl.textContent = '❌ Publish failed: '+(e&&e.message||'network error');
+      statusEl.style.color = '#E74C3C';
+    }
+    toast('Publish failed — check connection','red');
+  });
+}
+
+// Hook into initScoresTab and initStatsTab to populate selectors
+
+
+// ================================================================
+// END FIXTURE BUILDER EXTRAS
+// ================================================================
+
+// Restore logo images
 function restoreLogos(){
   var logoEl = document.getElementById('PITCH_LOGO_DATA');
   if(!logoEl || !logoEl.src || logoEl.src.length<50) return;
   var src = logoEl.src;
-  document.querySelectorAll('img[data-logo="1"]').forEach(function(img){
-    img.src = src;
-  });
+  document.querySelectorAll('img[data-logo="1"]').forEach(function(img){ img.src = src; });
 }
-// Fire immediately and on DOM ready
 restoreLogos();
 document.addEventListener('DOMContentLoaded', restoreLogos);
-
 </script>
 </body>
 </html>
