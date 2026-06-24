@@ -1510,48 +1510,55 @@ id="atab-content6" style="display:none;margin-top:24px">
 // SUPABASE DATABASE LAYER
 // All data syncs across devices in real time
 // ================================================================
-var SB_URL = "https://dkioezovgulwaeweytykg.supabase.co";
+var SB_URL = "https://dkioezovgulwaeweytkg.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRraW9lem92Z3Vsd2Fld2V5dGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTM4ODIsImV4cCI6MjA5NTAyOTg4Mn0.n_a4HgYOw-tmMLZ3Dn3HSjc29VTARXWTatIqRV9OFbQ";
 
-async function sbFetch(table, opts) {
+function sbFetch(table, opts) {
   opts = opts || {};
-  var url = SB_URL + '/rest/v1/' + table;
-  var params = [];
-  if (opts.select) params.push('select=' + opts.select);
-  if (opts.eq)     params.push(opts.eq);
-  if (opts.order)  params.push('order=' + opts.order);
-  if (opts.limit)  params.push('limit=' + opts.limit);
-  if (params.length) url += '?' + params.join('&');
+  return new Promise(function(resolve, reject) {
+    var url = SB_URL + '/rest/v1/' + table;
+    var params = [];
+    if (opts.select) params.push('select=' + encodeURIComponent(opts.select));
+    if (opts.eq)     params.push(opts.eq);
+    if (opts.order)  params.push('order=' + opts.order);
+    if (opts.limit)  params.push('limit=' + opts.limit);
+    if (params.length) url += '?' + params.join('&');
 
-  var method = opts.method || 'GET';
-  var headers = {
-    'apikey': SB_KEY,
-    'Authorization': 'Bearer ' + SB_KEY
-  };
-
-  // Only add Content-Type and Prefer for write operations
-  if (method !== 'GET') {
-    headers['Content-Type'] = 'application/json';
-    if (opts.prefer) headers['Prefer'] = opts.prefer;
-    else if (method === 'POST') headers['Prefer'] = 'return=representation';
-  }
-
-  try {
-    var fetchOpts = { method: method, headers: headers };
-    if (opts.body) fetchOpts.body = JSON.stringify(opts.body);
-    var res = await fetch(url, fetchOpts);
-    if (!res.ok) {
-      var txt = await res.text();
-      console.error('Supabase ' + method + ' error:', res.status, txt);
-      return null;
+    var method = (opts.method || 'GET').toUpperCase();
+    var xhr = new XMLHttpRequest();
+    xhr.open(method, url, true);
+    xhr.setRequestHeader('apikey', SB_KEY);
+    xhr.setRequestHeader('Authorization', 'Bearer ' + SB_KEY);
+    if (method !== 'GET' && method !== 'DELETE') {
+      xhr.setRequestHeader('Content-Type', 'application/json');
     }
-    var text = await res.text();
-    if (!text || text === '') return method === 'GET' ? [] : {};
-    try { return JSON.parse(text); } catch(e) { return []; }
-  } catch(err) {
-    console.error('Supabase fetch failed:', err.message);
-    throw err;
-  }
+    if (opts.prefer) {
+      xhr.setRequestHeader('Prefer', opts.prefer);
+    } else if (method === 'POST') {
+      xhr.setRequestHeader('Prefer', 'return=representation,resolution=merge-duplicates');
+    } else if (method === 'PATCH') {
+      xhr.setRequestHeader('Prefer', 'return=representation');
+    }
+
+    xhr.onload = function() {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        var text = xhr.responseText;
+        if (!text || text === '') { resolve(method === 'GET' ? [] : {}); return; }
+        try { resolve(JSON.parse(text)); } catch(e) { resolve([]); }
+      } else {
+        console.error('Supabase error:', xhr.status, xhr.responseText.slice(0,200));
+        resolve(null);
+      }
+    };
+    xhr.onerror = function() {
+      reject(new Error('Network error — could not reach Supabase'));
+    };
+    xhr.ontimeout = function() {
+      reject(new Error('Request timed out'));
+    };
+    xhr.timeout = 10000;
+    xhr.send(opts.body ? JSON.stringify(opts.body) : null);
+  });
 }
 
 // ── REGISTRATIONS ──────────────────────────────────────────────
