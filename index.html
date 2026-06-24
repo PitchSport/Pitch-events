@@ -1,3 +1,218 @@
+<!-- TAB 5: FIXTURE BUILDER -->
+    <div id="atab-content5" style="display:none;margin-top:24px">
+      <div class="admin-panel">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:18px">
+          <div class="admin-title" style="margin-bottom:0">🗓️ Fixture Builder</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-outline" onclick="fxSaveTournament()" style="padding:7px 16px;font-size:12px">💾 Save Tournament</button>
+            <button class="btn btn-outline" onclick="fxShowSaved()" style="padding:7px 16px;font-size:12px">📂 Saved Tournaments</button>
+            <button class="btn btn-outline" onclick="fxNewTournament()" style="padding:7px 16px;font-size:12px">＋ New Tournament</button>
+          </div>
+        </div>
+
+        <!-- Saved tournaments panel -->
+        <div id="fx-saved-panel" style="display:none;background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">📂 Saved Tournaments</div>
+          <div id="fx-saved-list"></div>
+        </div>
+
+        <!-- Current tournament name -->
+        <div style="background:var(--panel2);border-radius:8px;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px">
+          <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;min-width:120px">Tournament Name</div>
+          <input type="text" class="form-input" id="fx-tourney-name" placeholder="e.g. Pitch CWC 2026 — July Schedule" style="flex:1;padding:7px 12px;font-size:14px">
+        </div>
+
+        <!-- STEP 1: FORMAT with visual breakdown -->
+        <div style="background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Step 1 — Tournament Format</div>
+
+          <!-- Format cards -->
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px" id="fx-format-cards">
+            <div class="fx-fmt-card active" onclick="fxSelectFormat('group-knockout')" id="fcard-group-knockout" style="border:2px solid var(--gold);border-radius:8px;padding:14px;cursor:pointer;text-align:center;transition:all .15s">
+              <div style="font-size:28px;margin-bottom:6px">🏆</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:900;color:var(--white);text-transform:uppercase">Group + Knockout</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">Groups then elimination</div>
+            </div>
+            <div class="fx-fmt-card" onclick="fxSelectFormat('league')" id="fcard-league" style="border:2px solid rgba(255,255,255,.08);border-radius:8px;padding:14px;cursor:pointer;text-align:center;transition:all .15s">
+              <div style="font-size:28px;margin-bottom:6px">📊</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:900;color:var(--white);text-transform:uppercase">Round Robin League</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">Everyone plays everyone</div>
+            </div>
+            <div class="fx-fmt-card" onclick="fxSelectFormat('knockout-only')" id="fcard-knockout-only" style="border:2px solid rgba(255,255,255,.08);border-radius:8px;padding:14px;cursor:pointer;text-align:center;transition:all .15s">
+              <div style="font-size:28px;margin-bottom:6px">⚡</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:900;color:var(--white);text-transform:uppercase">Knockout Only</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:3px">Single elimination</div>
+            </div>
+          </div>
+          <input type="hidden" id="fx-format" value="group-knockout">
+
+          <!-- Format settings -->
+          <div id="fx-group-settings" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+            <div class="form-group">
+              <label class="form-label">Number of Groups</label>
+              <select class="form-select" id="fx-groups" onchange="fxFormatChange()">
+                <option value="1">1 Group</option><option value="2" selected>2 Groups</option>
+                <option value="3">3 Groups</option><option value="4">4 Groups</option>
+                <option value="6">6 Groups</option><option value="8">8 Groups</option>
+                <option value="12">12 Groups</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Teams per Group</label>
+              <select class="form-select" id="fx-tpg" onchange="fxFormatChange()"><option value="1">1 Team</option><option value="2">2 Teams</option><option value="3">3 Teams</option><option value="4">4 Teams</option><option value="5" selected>5 Teams</option><option value="6">6 Teams</option><option value="7">7 Teams</option><option value="8">8 Teams</option><option value="9">9 Teams</option><option value="10">10 Teams</option><option value="11">11 Teams</option><option value="12">12 Teams</option><option value="13">13 Teams</option><option value="14">14 Teams</option><option value="15">15 Teams</option><option value="16">16 Teams</option><option value="17">17 Teams</option><option value="18">18 Teams</option><option value="19">19 Teams</option><option value="20">20 Teams</option><option value="21">21 Teams</option><option value="22">22 Teams</option><option value="23">23 Teams</option><option value="24">24 Teams</option><option value="25">25 Teams</option><option value="26">26 Teams</option><option value="27">27 Teams</option><option value="28">28 Teams</option><option value="29">29 Teams</option><option value="30">30 Teams</option><option value="31">31 Teams</option><option value="32">32 Teams</option><option value="33">33 Teams</option><option value="34">34 Teams</option><option value="35">35 Teams</option><option value="36">36 Teams</option><option value="37">37 Teams</option><option value="38">38 Teams</option><option value="39">39 Teams</option><option value="40">40 Teams</option><option value="41">41 Teams</option><option value="42">42 Teams</option><option value="43">43 Teams</option><option value="44">44 Teams</option><option value="45">45 Teams</option><option value="46">46 Teams</option><option value="47">47 Teams</option><option value="48">48 Teams</option><option value="49">49 Teams</option><option value="50">50 Teams</option></select>
+            </div>
+            <div class="form-group" id="fx-advance-wrap">
+              <label class="form-label">Teams Advancing (per group)</label>
+              <select class="form-select" id="fx-advance" onchange="fxFormatChange()">
+                <option value="1">Top 1 → Final</option>
+                <option value="2" selected>Top 2 → Semi Finals</option>
+                <option value="4">Top 4 → Quarter Finals</option>
+                <option value="8">Top 8 → Round of 16</option>
+                <option value="16">Top 16 → Round of 32</option>
+              </select>
+            </div>
+          </div>
+          <div id="fx-ko-only-wrap" style="display:none;margin-bottom:14px">
+            <div class="form-group">
+              <label class="form-label">Total Teams in Knockout</label>
+              <select class="form-select" id="fx-ko-teams" onchange="fxFormatChange()">
+                <option value="4">4 Teams</option><option value="8">8 Teams</option>
+                <option value="16">16 Teams</option><option value="32" selected>32 Teams</option><option value="64">64 Teams</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- VISUAL BREAKDOWN (Score7 style) -->
+          <div id="fx-breakdown" style="background:var(--panel3);border-radius:8px;padding:14px;margin-top:4px"></div>
+        </div>
+
+        <!-- STEP 2: MATCH DAYS -->
+        <div style="background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Step 2 — Match Days &amp; Timing</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px">
+            <div class="form-group">
+              <label class="form-label">Game Duration (mins)</label>
+              <input type="number" class="form-input" id="fx-duration" value="14" min="1" max="120" onchange="fxCalc()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Break Between (mins)</label>
+              <input type="number" class="form-input" id="fx-break" value="5" min="0" max="60" onchange="fxCalc()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pitches / Courts</label>
+              <select class="form-select" id="fx-courts" onchange="fxCalc()">
+                <option value="1">1 Pitch</option><option value="2" selected>2 Pitches</option>
+                <option value="3">3 Pitches</option><option value="4">4 Pitches</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Number of Match Days</label>
+              <select class="form-select" id="fx-num-days" onchange="fxBuildDayRows()">
+                <option value="1">1 Day</option><option value="2">2 Days</option>
+                <option value="3" selected>3 Days</option><option value="4">4 Days</option><option value="5">5 Days</option>
+              </select>
+            </div>
+          </div>
+          <div id="fx-day-rows" style="display:flex;flex-direction:column;gap:10px"></div>
+          <div id="fx-est" style="margin-top:12px;font-size:12px;color:var(--muted);background:rgba(197,162,39,.04);border-radius:5px;padding:8px 12px"></div>
+        </div>
+
+        <!-- STEP 3: ASSIGN TEAMS -->
+        <div style="background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Step 3 — Assign Teams to Groups</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">Group</label>
+              <select class="form-select" id="grp-name">
+                <option>Group A</option><option>Group B</option><option>Group C</option><option>Group D</option>
+                <option>Group E</option><option>Group F</option><option>Group G</option><option>Group H</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pick from Approved Teams</label>
+              <select class="form-select" id="grp-picker" multiple style="height:80px" onchange="grpPickerChange()">
+                <option value="">No approved teams yet</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-bottom:12px">
+            <label class="form-label">Or type manually (one per line)</label>
+            <textarea class="form-input" id="grp-teams" rows="4" style="resize:vertical" placeholder="Brazil 🇧🇷&#10;France 🇫🇷&#10;Germany 🇩🇪&#10;Spain 🇪🇸&#10;Japan 🇯🇵"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn-save" onclick="saveGroup()" style="width:auto;padding:9px 22px">✓ Save Group</button>
+            <button class="btn-danger" onclick="clearGroups()">Clear All</button>
+            <button class="btn btn-outline" onclick="loadRegisteredTeams()" style="padding:8px 16px;font-size:12px">↻ Refresh Teams</button>
+          </div>
+          <div id="saved-groups-preview" style="margin-top:12px"></div>
+        </div>
+
+        <!-- STEP 4: GENERATE -->
+        <div style="background:rgba(197,162,39,.06);border:1px solid rgba(197,162,39,.2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Step 4 — Generate Schedule</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">Day 1 = Round Robin Matchday 1 · Day 2 = Round Robin Matchday 2 · Day 3 = Full Knockout</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button class="btn-save" onclick="generateSchedule()" style="width:auto;padding:12px 28px;font-size:16px">⚡ Generate Full Schedule</button>
+            <button class="btn btn-outline" onclick="generateKnockoutBracket()" style="padding:11px 20px;font-size:14px">🏆 Add Knockout Bracket</button>
+            <button class="btn btn-outline" onclick="toggleManual()" style="padding:11px 20px;font-size:14px">＋ Manual Match</button>
+          </div>
+        </div>
+
+        <!-- MANUAL ADD -->
+        <div id="manual-add-section" style="display:none;background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:14px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Add Match Manually</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+            <div class="form-group"><label class="form-label">Stage / Round</label>
+              <select class="form-select" id="fx-stage">
+                <option>Group A</option><option>Group B</option><option>Group C</option><option>Group D</option>
+                <option>Round of 16</option><option>Quarter Final</option><option>Semi Final</option><option>3rd Place</option><option>Final</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Match Day</label>
+              <select class="form-select" id="fx-day">
+                <option value="1">Day 1</option><option value="2">Day 2</option><option value="3">Day 3</option>
+              </select>
+            </div>
+            <div class="form-group"><label class="form-label">Kick-off Time</label>
+              <input type="time" class="form-input" id="fx-time" value="08:00">
+            </div>
+            <div class="form-group"><label class="form-label">Pitch</label>
+              <select class="form-select" id="fx-pitch">
+                <option value="1">Pitch 1</option><option value="2">Pitch 2</option><option value="3">Pitch 3</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:10px;align-items:end;margin-bottom:12px">
+            <div class="form-group"><label class="form-label">Home Team</label><input type="text" class="form-input" id="fx-home" placeholder="Team name 🏳️"></div>
+            <div style="padding-bottom:10px;font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--muted);text-align:center">VS</div>
+            <div class="form-group"><label class="form-label">Away Team</label><input type="text" class="form-input" id="fx-away" placeholder="Team name 🏳️"></div>
+          </div>
+          <button class="btn-save" onclick="addFixture()" style="width:auto;padding:9px 22px">+ Add Match</button>
+        </div>
+
+        <!-- SCHEDULE OUTPUT -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--white);text-transform:uppercase">Schedule <span id="fx-match-count" style="color:var(--muted);font-weight:400"></span></div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline" onclick="exportSchedule()" style="padding:6px 14px;font-size:12px">📋 Copy</button>
+            <button class="btn-danger" onclick="clearFixtures()">Clear All</button>
+          </div>
+        </div>
+        <div id="fixtures-admin-list" style="max-height:540px;overflow-y:auto;border-radius:7px"></div>
+
+        <!-- Save & Publish -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)">
+          <button class="btn-save" onclick="fxSaveTournament()" style="width:auto;padding:11px 24px;font-size:15px">💾 Save Tournament</button>
+          <button class="btn-save" onclick="fxPublishFixtures()" style="width:auto;padding:11px 24px;font-size:15px;background:linear-gradient(135deg,#2ECC71,#27AE60)">🌐 Publish to Website</button>
+          <button class="btn btn-outline" onclick="exportSchedule()" style="padding:10px 20px;font-size:14px">📋 Copy Schedule</button>
+          <button class="btn-danger" onclick="clearFixtures()" style="width:auto">🗑️ Clear All</button>
+        </div>
+
+        <!-- Publish status -->
+        <div id="fx-publish-status" style="display:none;margin-top:12px;padding:12px 16px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);border-radius:7px;font-size:13px;color:#2ECC71;font-weight:600"></div>
+      </div>
+    </div>
+
 <!DOCTYP
 
       <!-- Stats Overview Table -->
@@ -862,10 +1077,18 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
       <div class="admin-panel">
         <div class="admin-title">⚽ Update Match Score</div>
 
-        <!-- Match selector -->
-        <div class="form-group" style="margin-bottom:16px">
-          <label class="form-label">Select Match</label>
-          <select class="form-select" id="admin-match-sel" onchange="loadMatchForEdit()"></select>
+        <!-- Tournament selector -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Tournament</label>
+            <select class="form-select" id="scores-tourney-sel" onchange="scoresTourneyChanged()">
+              <option value="current">Current / Active Tournament</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label class="form-label">Select Match</label>
+            <select class="form-select" id="admin-match-sel" onchange="loadMatchForEdit()"></select>
+          </div>
         </div>
 
         <!-- Score display -->
@@ -968,6 +1191,13 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
     <div id="atab-content2" style="display:none;margin-top:24px">
       <div class="admin-panel">
         <div class="admin-title">📊 Update Player Stats</div>
+        <!-- Tournament selector for stats -->
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Tournament</label>
+          <select class="form-select" id="stats-tourney-sel" onchange="statsTourneyChanged()">
+            <option value="current">Current / Active Tournament</option>
+          </select>
+        </div>
         <div class="form-row">
           <div class="form-group"><label class="form-label">Player Name</label><input type="text" class="form-input" id="stat-player" placeholder="e.g. Haziq Azri"></div>
           <div class="form-group"><label class="form-label">Team</label><input type="text" class="form-input" id="stat-team" placeholder="e.g. Brazil (Shell MDS)"></div>
@@ -2584,6 +2814,8 @@ function fxFormatChange() {
   fxBuildDayRows();
   fxCalc();
   updateFxSummary();
+
+  fxUpdateBreakdown();
 }
 
 function updateFxSummary() {
@@ -2774,6 +3006,8 @@ function initFixtureTab() {
   renderFixturesAdmin();
   loadRegisteredTeams();
   renderSavedGroupsPreview();
+
+  var fmt=(document.getElementById('fx-format')||{value:'group-knockout'}).value; fxSelectFormat(fmt);
 }
 
 // ===== END FIXTURE BUILDER =====
@@ -4579,10 +4813,14 @@ function quickEditStat(playerName) {
 function initScoresTab() {
   populateAdminMatchSel ? populateAdminMatchSel() : null;
   refreshScoresTable();
+
+  if(typeof populateTourneySelectors==="function") populateTourneySelectors();
 }
 function initStatsTab() {
   initStatDropdowns();
   refreshStatsTable();
+
+  if(typeof populateTourneySelectors==="function") populateTourneySelectors();
 }
 // ================================================================
 // END SCORES & STATS EDIT TABLES
@@ -4700,6 +4938,366 @@ updateNavForLogin();
 // ================================================================
 
 function genKO(){ generateKnockoutBracket(); }
+
+// ================================================================
+// FIXTURE BUILDER — FORMAT CARDS + BREAKDOWN + SAVED TOURNAMENTS
+// ================================================================
+
+// ── Format card selection ─────────────────────────────────────
+function fxSelectFormat(fmt) {
+  document.getElementById('fx-format').value = fmt;
+  // Update card styles
+  ['group-knockout','league','knockout-only'].forEach(function(f){
+    var c = document.getElementById('fcard-'+f);
+    if(c) {
+      c.style.border = f===fmt ? '2px solid var(--gold)' : '2px solid rgba(255,255,255,.08)';
+      c.style.background = f===fmt ? 'rgba(201,162,39,.06)' : 'transparent';
+    }
+  });
+  // Show/hide settings
+  var gs = document.getElementById('fx-group-settings');
+  var kw = document.getElementById('fx-ko-only-wrap');
+  var aw = document.getElementById('fx-advance-wrap');
+  if(gs) gs.style.display = fmt==='knockout-only' ? 'none' : 'grid';
+  if(kw) kw.style.display = fmt==='knockout-only' ? 'block' : 'none';
+  if(aw) aw.style.display = fmt==='league' ? 'none' : 'block';
+  fxUpdateBreakdown();
+  fxBuildDayRows();
+}
+
+// ── Visual breakdown (Score7 style) ──────────────────────────
+function fxUpdateBreakdown() {
+  var el = document.getElementById('fx-breakdown');
+  if(!el) return;
+  var fmt  = document.getElementById('fx-format').value;
+  var ng   = parseInt(document.getElementById('fx-groups').value||2);
+  var tpg  = parseInt(document.getElementById('fx-tpg').value||5);
+  var adv  = parseInt((document.getElementById('fx-advance')||{value:'2'}).value||2);
+  var koT  = parseInt((document.getElementById('fx-ko-teams')||{value:'8'}).value||8);
+  var dur  = parseInt((document.getElementById('fx-duration')||{value:'14'}).value||14);
+  var brk  = parseInt((document.getElementById('fx-break')||{value:'5'}).value||5);
+  var cts  = parseInt((document.getElementById('fx-courts')||{value:'2'}).value||2);
+
+  var totalTeams, groupMatches, koMatches, totalMatches, stages;
+
+  if(fmt==='group-knockout') {
+    totalTeams   = ng * tpg;
+    // Double round robin: n*(n-1) matches per group * 2
+    var matchPerGroup = tpg*(tpg-1);
+    groupMatches = ng * matchPerGroup;
+    var koTeams  = ng * adv;
+    koMatches    = koTeams > 1 ? koTeams - 1 : 0;
+    totalMatches = groupMatches + koMatches;
+    stages = [
+      {label:'Group Stage',    matches:groupMatches, icon:'📋', detail:ng+' groups × '+tpg+' teams, double RR'},
+      {label:'Knockout Stage', matches:koMatches,    icon:'⚡', detail:koTeams+' teams advance, '+koRounds(koTeams)+' rounds'},
+      {label:'Total',          matches:totalMatches, icon:'🏆', detail:Math.ceil(totalMatches/(cts))+' time slots needed'},
+    ];
+  } else if(fmt==='league') {
+    totalTeams   = ng * tpg;
+    var matchPerGroup2 = tpg*(tpg-1);
+    totalMatches = ng * matchPerGroup2;
+    groupMatches = totalMatches;
+    koMatches    = 0;
+    stages = [
+      {label:'Round Robin',    matches:groupMatches, icon:'📊', detail:'Every team plays every other team twice'},
+      {label:'No Knockout',    matches:0,            icon:'—',  detail:'Final standings determine winner'},
+      {label:'Total',          matches:totalMatches, icon:'🏆', detail:totalTeams+' teams, '+Math.ceil(totalMatches/cts)+' slots needed'},
+    ];
+  } else {
+    totalTeams   = koT;
+    koMatches    = koT - 1;
+    totalMatches = koMatches;
+    stages = [
+      {label:'Knockout Only',  matches:koMatches,    icon:'⚡', detail:koRounds(koT)+' rounds, single elimination'},
+      {label:'Total Teams',    matches:koT,          icon:'👥', detail:'Winner-takes-all format'},
+      {label:'Total Matches',  matches:totalMatches, icon:'🏆', detail:Math.ceil(totalMatches/cts)+' slots needed'},
+    ];
+  }
+
+  // Time estimate
+  var slotMins = dur + brk;
+  var totalSlots = Math.ceil(totalMatches / cts);
+  var totalMins  = totalSlots * slotMins;
+  var hours = Math.floor(totalMins/60);
+  var mins  = totalMins % 60;
+  var timeStr = hours > 0 ? hours+'h '+(mins>0?mins+'m':'') : mins+'m';
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px">';
+  stages.forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:12px 14px;text-align:center">'
+      +'<div style="font-size:22px;margin-bottom:4px">'+s.icon+'</div>'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:28px;font-weight:900;color:var(--gold)">'+s.matches+'</div>'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:var(--white);text-transform:uppercase;margin:2px 0">'+s.label+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);line-height:1.4">'+s.detail+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  // Stage flow diagram
+  html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:10px 14px;background:var(--panel2);border-radius:7px;margin-bottom:10px">';
+  if(fmt==='group-knockout') {
+    for(var g=0;g<ng;g++){
+      html += '<div style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:var(--gold)">Group '+String.fromCharCode(65+g)+'</div>';
+      if(g<ng-1) html += '<span style="color:var(--dim);font-size:11px">+</span>';
+    }
+    html += '<span style="color:var(--dim);font-size:16px;margin:0 4px">→</span>';
+    var koT2 = ng*adv;
+    var rem = koT2;
+    while(rem>=2){
+      html += '<div style="background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:#2ECC71">'+(rem===2?'Final':rem===4?'Semi Finals':rem===8?'Quarter Finals':'Round of '+rem)+'</div>';
+      if(rem>2) html += '<span style="color:var(--dim);font-size:16px;margin:0 2px">→</span>';
+      rem = rem/2;
+    }
+  } else if(fmt==='league') {
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:700;color:var(--white)">All '+totalTeams+' teams play every other team twice → Final Standings</div>';
+  } else {
+    var rem2 = koT;
+    while(rem2>=2){
+      html += '<div style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);border-radius:5px;padding:4px 10px;font-family:\'Barlow Condensed\',sans-serif;font-size:12px;font-weight:700;color:#E74C3C">'+(rem2===2?'Final':rem2===4?'Semi Finals':rem2===8?'Quarter Finals':'Round of '+rem2)+'</div>';
+      if(rem2>2) html += '<span style="color:var(--dim);font-size:16px;margin:0 2px">→</span>';
+      rem2 = rem2/2;
+    }
+  }
+  html += '</div>';
+
+  // Time + teams summary bar
+  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted)">'
+    +'<span>👥 <strong style="color:var(--white)">'+(totalTeams||koT)+' Teams</strong></span>'
+    +'<span>⚽ <strong style="color:var(--white)">'+totalMatches+' Matches</strong></span>'
+    +'<span>⏱️ <strong style="color:var(--white)">'+dur+'min</strong> per match</span>'
+    +'<span>🏟️ <strong style="color:var(--white)">'+cts+'</strong> Pitch'+(cts>1?'es':'')+' running parallel</span>'
+    +'<span>🕐 ~<strong style="color:var(--gold)">'+timeStr+'</strong> total play time</span>'
+    +'</div>';
+
+  el.innerHTML = html;
+}
+
+function koRounds(n) {
+  var rounds = 0;
+  while(n>1){ rounds++; n=Math.floor(n/2); }
+  return rounds;
+}
+
+// ── Override fxFormatChange to update breakdown ───────────────
+
+
+// ── SAVED TOURNAMENTS ─────────────────────────────────────────
+function fxSaveTournament() {
+  var name = (document.getElementById('fx-tourney-name').value||'').trim();
+  if(!name){ toast('Enter a tournament name first','red'); return; }
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var idx = saved.findIndex(function(t){ return t.name===name; });
+  var entry = {
+    name: name,
+    savedAt: new Date().toLocaleString(),
+    format:  (document.getElementById('fx-format')||{}).value||'group-knockout',
+    groups:  (document.getElementById('fx-groups')||{}).value||'2',
+    tpg:     (document.getElementById('fx-tpg')||{}).value||'5',
+    advance: (document.getElementById('fx-advance')||{}).value||'2',
+    duration:(document.getElementById('fx-duration')||{}).value||'14',
+    brk:     (document.getElementById('fx-break')||{}).value||'5',
+    courts:  (document.getElementById('fx-courts')||{}).value||'2',
+    numDays: (document.getElementById('fx-num-days')||{}).value||'3',
+    groupData: cacheGet('pitchcwc_groups')||{},
+    matches:   cacheGet('pitchcwc_matches')||[],
+  };
+  if(idx!==-1) saved[idx]=entry; else saved.unshift(entry);
+  localStorage.setItem('pitchcwc_tournaments', JSON.stringify(saved));
+  toast('Tournament "'+name+'" saved ✅');
+}
+
+function fxShowSaved() {
+  var panel = document.getElementById('fx-saved-panel');
+  if(!panel) return;
+  panel.style.display = panel.style.display==='none' ? 'block' : 'none';
+  fxRenderSavedList();
+}
+
+function fxRenderSavedList() {
+  var el = document.getElementById('fx-saved-list');
+  if(!el) return;
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  if(!saved.length){
+    el.innerHTML='<div style="text-align:center;padding:16px;color:var(--muted);font-size:13px">No saved tournaments yet.</div>';
+    return;
+  }
+  el.innerHTML = saved.map(function(t,i){
+    var fmt = t.format==='group-knockout'?'🏆 Group+KO':t.format==='league'?'📊 League':'⚡ Knockout';
+    var info = t.groups+'g × '+t.tpg+' teams · '+t.courts+' pitches · '+(t.matches||[]).length+' matches';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--panel3);border-radius:7px;margin-bottom:8px;gap:10px;flex-wrap:wrap">'
+      +'<div>'
+        +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:900;color:var(--white);margin-bottom:2px">'+t.name+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+fmt+' · '+info+'</div>'
+        +'<div style="font-size:10px;color:var(--dim);margin-top:2px">Saved: '+t.savedAt+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px">'
+        +'<button onclick="fxLoadTournament('+i+')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:6px 14px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">📂 Load</button>'
+        +'<button onclick="fxDeleteTournament('+i+')" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:6px 10px;border-radius:5px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function fxLoadTournament(idx) {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t) return;
+  // Load all settings
+  var set = function(id,v){ var el=document.getElementById(id); if(el) el.value=v; };
+  document.getElementById('fx-tourney-name').value = t.name;
+  set('fx-groups', t.groups);
+  set('fx-tpg', t.tpg);
+  set('fx-advance', t.advance||'2');
+  set('fx-duration', t.duration||'14');
+  set('fx-break', t.brk||'5');
+  set('fx-courts', t.courts||'2');
+  set('fx-num-days', t.numDays||'3');
+  // Restore groups and matches
+  if(t.groupData && Object.keys(t.groupData).length){
+    cacheSet('pitchcwc_groups', t.groupData);
+  }
+  if(t.matches && t.matches.length){
+    cacheSet('pitchcwc_matches', t.matches);
+  }
+  // Restore format card
+  fxSelectFormat(t.format||'group-knockout');
+  fxBuildDayRows();
+  if(typeof renderFixturesAdmin==='function') renderFixturesAdmin();
+  if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
+  // Hide panel
+  var panel=document.getElementById('fx-saved-panel');
+  if(panel) panel.style.display='none';
+  toast('Loaded: '+t.name);
+}
+
+function fxDeleteTournament(idx) {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  if(!confirm('Delete "'+saved[idx].name+'"?')) return;
+  saved.splice(idx,1);
+  localStorage.setItem('pitchcwc_tournaments', JSON.stringify(saved));
+  fxRenderSavedList();
+  toast('Tournament deleted');
+}
+
+function fxNewTournament() {
+  if(!confirm('Start a new tournament? Unsaved changes will be lost.')) return;
+  document.getElementById('fx-tourney-name').value='';
+  fxSelectFormat('group-knockout');
+  var set=function(id,v){var el=document.getElementById(id);if(el)el.value=v;};
+  set('fx-groups','2');set('fx-tpg','5');set('fx-duration','14');
+  set('fx-break','5');set('fx-courts','2');set('fx-num-days','3');
+  fxBuildDayRows();
+  toast('New tournament started');
+}
+
+function toggleManual() {
+  var el = document.getElementById('manual-add-section');
+  if(el) el.style.display = el.style.display==='none'?'block':'none';
+}
+
+// Init breakdown on fixture tab load
+
+// ================================================================
+// END FIXTURE BUILDER EXTRAS
+// ================================================================
+
+// ================================================================
+// FIXTURE BUILDER EXTRAS: TOURNEY SELECTORS + PUBLISH
+// ================================================================
+
+// Populate tourney dropdowns from saved list
+function populateTourneySelectors() {
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var opts = '<option value="current">Current / Active Tournament</option>' +
+    saved.map(function(t,i){
+      return '<option value="saved_'+i+'">'+t.name+'</option>';
+    }).join('');
+  ['scores-tourney-sel','stats-tourney-sel'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el) el.innerHTML = opts;
+  });
+}
+
+function scoresTourneyChanged() {
+  var val = document.getElementById('scores-tourney-sel').value;
+  if(val==='current'){
+    // Use active cache
+    populateAdminMatchSel ? populateAdminMatchSel() : null;
+    refreshScoresTable ? refreshScoresTable() : null;
+    return;
+  }
+  // Load from saved tournament
+  var idx = parseInt(val.replace('saved_',''));
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t || !t.matches) return;
+  cacheSet('pitchcwc_matches', t.matches);
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  refreshScoresTable ? refreshScoresTable() : null;
+  toast('Showing matches from: '+t.name);
+}
+
+function statsTourneyChanged() {
+  var val = document.getElementById('stats-tourney-sel').value;
+  if(val==='current'){
+    initStatDropdowns ? initStatDropdowns() : null;
+    refreshStatsTable ? refreshStatsTable() : null;
+    return;
+  }
+  var idx = parseInt(val.replace('saved_',''));
+  var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
+  var t = saved[idx];
+  if(!t) return;
+  // Load group data so player lists are available
+  if(t.groupData) cacheSet('pitchcwc_groups', t.groupData);
+  initStatDropdowns ? initStatDropdowns() : null;
+  refreshStatsTable ? refreshStatsTable() : null;
+  toast('Showing stats context for: '+t.name);
+}
+
+// Publish fixtures to website (saves to Supabase so public pages update)
+function fxPublishFixtures() {
+  if(!adminLoggedIn){toast('Not authorised','red');return;}
+  var matches = cacheGet('pitchcwc_matches')||[];
+  var groups  = cacheGet('pitchcwc_groups')||{};
+  if(!matches.length && !Object.keys(groups).length){
+    toast('Nothing to publish — generate fixtures first','red'); return;
+  }
+  var statusEl = document.getElementById('fx-publish-status');
+  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing...'; }
+
+  var tasks = [];
+  // Push matches
+  if(matches.length){
+    tasks.push(dbClearMatches().then(function(){ return dbSaveMatches(matches); }));
+  }
+  // Push groups
+  Object.keys(groups).forEach(function(gn){
+    tasks.push(dbSaveGroup(gn, groups[gn]));
+  });
+
+  Promise.all(tasks).then(function(){
+    if(statusEl){
+      statusEl.textContent = '✅ Published! '+matches.length+' matches and '+Object.keys(groups).length+' groups are now live on the website.';
+      statusEl.style.color = '#2ECC71';
+    }
+    toast('✅ Fixtures published to website!');
+  }).catch(function(e){
+    if(statusEl){
+      statusEl.textContent = '❌ Publish failed: '+(e&&e.message||'network error');
+      statusEl.style.color = '#E74C3C';
+    }
+    toast('Publish failed — check connection','red');
+  });
+}
+
+// Hook into initScoresTab and initStatsTab to populate selectors
+
+
+// ================================================================
+// END FIXTURE BUILDER EXTRAS
+// ================================================================
 </script>
 </body>
 </html>
