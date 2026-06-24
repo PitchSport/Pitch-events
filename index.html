@@ -3734,6 +3734,49 @@ document.querySelectorAll('.fade-in').forEach(el=>observer.observe(el));
 
 // ===== INIT =====
 showPage('home');
+
+// ================================================================
+// SUPABASE AUTO-PING — keeps project alive, prevents pausing
+// Pings every 4 days (Supabase pauses after 7 days of inactivity)
+// ================================================================
+function sbPing() {
+  fetch(SB_URL + '/rest/v1/settings?key=eq.ping_keep_alive', {
+    method: 'POST',
+    headers: {
+      'apikey': SB_KEY,
+      'Authorization': 'Bearer ' + SB_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'resolution=merge-duplicates'
+    },
+    body: JSON.stringify({ key: 'ping_keep_alive', value: new Date().toISOString() })
+  }).then(function() {
+    console.log('Supabase ping sent: ' + new Date().toLocaleString());
+  }).catch(function(e) {
+    console.warn('Ping failed (offline?):', e.message);
+  });
+}
+
+// Ping immediately on load
+sbPing();
+
+// Ping every 4 days (345,600,000 ms)
+setInterval(sbPing, 345600000);
+
+// Also ping when user comes back to the tab after being away
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible') {
+    var lastPing = localStorage.getItem('pitchcwc_last_ping');
+    var now = Date.now();
+    // Only ping if last ping was more than 24 hours ago
+    if (!lastPing || (now - parseInt(lastPing)) > 86400000) {
+      localStorage.setItem('pitchcwc_last_ping', now);
+      sbPing();
+    }
+  }
+});
+// ================================================================
+// END AUTO-PING
+// ================================================================
 </script>
 </body>
 </html>
