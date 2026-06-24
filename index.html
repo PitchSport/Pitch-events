@@ -1,4 +1,13 @@
-<!DOCTYPE html>
+<!DOCTYP
+
+      <!-- Stats Overview Table -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--white);text-transform:uppercase">Current Stats</div>
+          <button class="btn btn-outline" onclick="refreshStatsTable()" style="padding:6px 14px;font-size:12px">&#8635; Refresh</button>
+        </div>
+        <div id="stats-table" style="overflow-x:auto"></div>
+      </div>E html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -342,6 +351,9 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
   .admin-tab{padding:8px 9px;font-size:12px}
   .podium-1{height:100px!important}.podium-2{height:76px!important}.podium-3{height:60px!important}
 }
+
+/* User menu dropdown */
+#user-dropdown button:hover { background:rgba(201,162,39,.07) !important; }
 </style>
 </head>
 <body>
@@ -387,7 +399,48 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <button class="nav-live" onclick="showPage('live')"><span class="dot"></span> Live</button>
-    <button class="nav-link" onclick="openAdmin()" style="border:1px solid rgba(255,255,255,.09);cursor:pointer;pointer-events:all;position:relative;z-index:9001">⚙ Admin</button>
+    <!-- Admin/User menu — shows login button or user pill when logged in -->
+    <div id="nav-user-area" style="position:relative">
+      <!-- NOT logged in: show login button -->
+      <button id="nav-login-btn" onclick="openAdmin()" style="border:1px solid rgba(255,255,255,.12);background:none;color:var(--muted);padding:6px 14px;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;transition:all .15s" onmouseover="this.style.color='var(--gold)';this.style.borderColor='var(--gold)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='rgba(255,255,255,.12)'">⚙ Admin</button>
+
+      <!-- Logged in: show user pill with dropdown -->
+      <div id="nav-user-pill" style="display:none;position:relative">
+        <button onclick="toggleUserMenu()" style="display:flex;align-items:center;gap:8px;background:rgba(201,162,39,.1);border:1px solid rgba(201,162,39,.3);color:var(--gold);padding:6px 14px;border-radius:5px;font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer">
+          <span id="nav-role-icon">⚙</span>
+          <span id="nav-role-label">Admin</span>
+          <span style="font-size:10px;opacity:.7">▼</span>
+        </button>
+
+        <!-- Dropdown menu -->
+        <div id="user-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:#1A1A1A;border:1px solid rgba(201,162,39,.25);border-radius:8px;min-width:180px;z-index:99999;box-shadow:0 8px 32px rgba(0,0,0,.5);overflow:hidden">
+          <!-- Role badge -->
+          <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.07)">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px">Logged in as</div>
+            <div id="dropdown-role-name" style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:900;color:var(--gold);text-transform:uppercase"></div>
+          </div>
+          <!-- Menu items -->
+          <button onclick="goToAdmin();closeUserMenu()" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(201,162,39,.07)'" onmouseout="this.style.background='none'">
+            <span>🔧</span> Admin Panel
+          </button>
+          <button onclick="goToScores();closeUserMenu()" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(201,162,39,.07)'" onmouseout="this.style.background='none'">
+            <span>⚽</span> Update Scores
+          </button>
+          <button onclick="goToStats();closeUserMenu()" id="dd-stats-btn" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(201,162,39,.07)'" onmouseout="this.style.background='none'">
+            <span>📊</span> Update Stats
+          </button>
+          <button onclick="goToRegistrations();closeUserMenu()" id="dd-regs-btn" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(201,162,39,.07)'" onmouseout="this.style.background='none'">
+            <span>📋</span> Registrations
+          </button>
+          <button onclick="goToFixtures();closeUserMenu()" id="dd-fx-btn" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;border-bottom:1px solid rgba(255,255,255,.05);color:var(--text);font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(201,162,39,.07)'" onmouseout="this.style.background='none'">
+            <span>🗓️</span> Fixtures
+          </button>
+          <button onclick="doLogout();closeUserMenu()" style="width:100%;text-align:left;padding:10px 14px;background:none;border:none;color:#E74C3C;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .15s" onmouseover="this.style.background='rgba(231,76,60,.07)'" onmouseout="this.style.background='none'">
+            <span>🚪</span> Log Out
+          </button>
+        </div>
+      </div>
+    </div>
     <div class="hamburger" onclick="toggleMenu()"><span></span><span></span><span></span></div>
   </div>
 </nav>
@@ -808,22 +861,27 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
     <div id="atab-content1" style="margin-top:24px">
       <div class="admin-panel">
         <div class="admin-title">⚽ Update Match Score</div>
-        <div class="form-group" style="margin-bottom:14px">
+
+        <!-- Match selector -->
+        <div class="form-group" style="margin-bottom:16px">
           <label class="form-label">Select Match</label>
           <select class="form-select" id="admin-match-sel" onchange="loadMatchForEdit()"></select>
         </div>
+
+        <!-- Score display -->
         <div class="score-inputs">
           <div style="text-align:center">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em" id="admin-home-name">Home</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;font-weight:700" id="admin-home-name">Home</div>
             <input type="number" class="score-input" id="admin-score-h" value="0" min="0">
           </div>
           <div class="score-vs">VS</div>
           <div style="text-align:center">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em" id="admin-away-name">Away</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em;font-weight:700" id="admin-away-name">Away</div>
             <input type="number" class="score-input" id="admin-score-a" value="0" min="0">
           </div>
         </div>
-        <div class="form-row">
+
+        <div class="form-row" style="margin-bottom:16px">
           <div class="form-group">
             <label class="form-label">Match Status</label>
             <select class="form-select" id="admin-match-status">
@@ -837,7 +895,72 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
             <input type="text" class="form-input" id="admin-match-minute" placeholder="e.g. 7'">
           </div>
         </div>
-        <button class="btn-save" onclick="saveScore()">Save Score</button>
+
+        <!-- Goalscorer section -->
+        <div style="background:var(--panel2);border-radius:8px;padding:16px;margin-bottom:16px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px">⚽ Add Goalscorer</div>
+
+          <!-- Step 1: Which team scored -->
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">1. Which Team</label>
+              <select class="form-select" id="scorer-side" onchange="scorerTeamChanged()">
+                <option value="">— Select —</option>
+                <option value="home">Home Team</option>
+                <option value="away">Away Team</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">2. Select Player</label>
+              <select class="form-select" id="scorer-player-sel" onchange="scorerPlayerChanged()" disabled>
+                <option value="">— Select team first —</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Auto-filled player info -->
+          <div id="scorer-player-info" style="display:none;background:var(--panel3);border-radius:6px;padding:10px 14px;margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--gold)" id="scorer-jersey-display">#—</div>
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--white)" id="scorer-name-display">—</div>
+                <div style="font-size:11px;color:var(--muted)" id="scorer-pos-display">—</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Minute and type -->
+          <div class="form-row" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">3. Minute</label>
+              <input type="text" class="form-input" id="scorer-minute" placeholder="e.g. 7'">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select class="form-select" id="scorer-type">
+                <option value="Goal">Goal</option>
+                <option value="Own Goal">Own Goal</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Hidden name field -->
+          <input type="hidden" id="scorer-name" value="">
+
+          <button class="btn btn-outline" onclick="addScorer()" id="add-scorer-btn" disabled style="padding:8px 20px;font-size:13px;opacity:.5">+ Add Scorer</button>
+          <div id="scorers-list" style="margin-top:10px"></div>
+        </div>
+
+        <button class="btn-save" onclick="saveScore()">💾 Save Score &amp; Scorers</button>
+      </div>
+
+      <!-- Match Results Table — quick overview & edit -->
+      <div class="admin-panel" style="margin-top:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+          <div class="admin-title" style="margin-bottom:0">📋 All Match Results</div>
+          <button class="btn btn-outline" onclick="refreshScoresTable()" style="padding:6px 14px;font-size:12px">↻ Refresh</button>
+        </div>
+        <div id="scores-table" style="overflow-x:auto"></div>
       </div>
     </div>
 
@@ -1724,12 +1847,20 @@ function doLogin() {
   var oPw  = localStorage.getItem("pitchcwc_official_pw") || "official2026";
   if (role==="admin" && pw===aPw) {
     adminLoggedIn=true; currentRole="admin";
-    closeAdmin(); showPage("admin");
+    localStorage.setItem('pitchcwc_role','admin');
+    closeAdmin();
+    showPage("admin");
+    if(typeof initScoresTab==='function') initScoresTab();
+    if(typeof updateNavForLogin==='function') updateNavForLogin();
     var rb=document.getElementById("admin-role-badge"); if(rb) rb.textContent="Admin";
     toast("Logged in as Admin");
   } else if (role==="official" && pw===oPw) {
     adminLoggedIn=true; currentRole="official";
-    closeAdmin(); showPage("admin");
+    localStorage.setItem('pitchcwc_role','official');
+    closeAdmin();
+    showPage("admin");
+    if(typeof initScoresTab==='function') initScoresTab();
+    if(typeof updateNavForLogin==='function') updateNavForLogin();
     var rb2=document.getElementById("admin-role-badge"); if(rb2) rb2.textContent="Match Official";
     ["atab3","atab4","atab5","atab6","atab7"].forEach(function(id){ var t=document.getElementById(id); if(t) t.style.display="none"; });
     adminTab(1);
@@ -2777,6 +2908,8 @@ function adminTab(n) {
   if (el) el.style.display='block';
   var btn = document.getElementById('atab'+n);
   if (btn) btn.classList.add('active');
+  if (n===1) { initScoresTab(); }
+  if (n===2) { initStatsTab(); }
   if (n===3) renderRegistrations();
   if (n===5) initFixtureTab();
 }
@@ -2898,7 +3031,11 @@ function saveStat(){
     if(gk){gk.cs=cs;gk.save=save;}else{keepersData.push({name,team,flag,cs,save});}
     cacheSet('pitchcwc_keepers', keepersData);
   }
+  // Save to Supabase
+  dbUpsertStat({name:name, team:team, flag:flag, goals:goals, assists:assists, cs:cs, save:save});
   toast('Stats updated for '+name);
+  // Refresh stats table
+  if(typeof renderStatsTable==='function') renderStatsTable();
 }
 
 
@@ -3010,6 +3147,20 @@ function renderMatch(m){
 function renderLive(){
   const grid = document.getElementById('liveMatchGrid');
   if(!grid) return;
+  // Pull latest matches and announcement from Supabase
+  Promise.all([
+    dbGetMatches().catch(function(){return [];}),
+    dbGetSetting('announcement').catch(function(){return null;})
+  ]).then(function(results){
+    var rows = results[0]; var ann = results[1];
+    if(rows && rows.length) cacheSet('pitchcwc_matches', rows);
+    if(ann !== null) localStorage.setItem('pitchcwc_announcement', ann||'');
+    _doRenderLive();
+  }).catch(function(){ _doRenderLive(); });
+}
+function _doRenderLive(){
+  const grid = document.getElementById('liveMatchGrid');
+  if(!grid) return;
   let html = '';
 
   // Announcement banner (from admin)
@@ -3059,6 +3210,15 @@ function renderLive(){
 function renderFixtures(filter='all'){
   const grid = document.getElementById('fixturesGrid');
   if(!grid) return;
+  // Always pull from Supabase so other devices see latest fixtures
+  dbGetMatches().then(function(rows){
+    if(rows && rows.length){ cacheSet('pitchcwc_matches', rows); }
+    _doRenderFixtures(filter);
+  }).catch(function(){ _doRenderFixtures(filter); });
+}
+function _doRenderFixtures(filter){
+  const grid = document.getElementById('fixturesGrid');
+  if(!grid) return;
   const allM = (cacheGet('pitchcwc_matches')||[]);
   const filtered = filter==='all'?allM:allM.filter(m=>m.group===filter);
   if(filtered.length===0){
@@ -3075,6 +3235,15 @@ function filterFixtures(f,btn){
 }
 
 function renderStandings(){
+  const grid = document.getElementById('standingsGrid');
+  if(!grid) return;
+  // Pull from Supabase so standings show on all devices
+  dbGetGroups().then(function(obj){
+    if(obj && Object.keys(obj).length){ cacheSet('pitchcwc_groups', obj); }
+    _doRenderStandings();
+  }).catch(function(){ _doRenderStandings(); });
+}
+function _doRenderStandings(){
   const grid = document.getElementById('standingsGrid');
   if(!grid) return;
   const savedGroups = (cacheGet('pitchcwc_groups')||null);
@@ -3098,6 +3267,12 @@ function renderStandings(){
 }
 
 function renderStats(){
+  dbGetStats().then(function(rows){
+    if(rows&&rows.length) cacheSet('pitchcwc_stats',rows);
+    _doRenderStats();
+  }).catch(function(){_doRenderStats();});
+}
+function _doRenderStats(){
   const statsData = (cacheGet('pitchcwc_stats')||[]);
   const keepersData = (cacheGet('pitchcwc_keepers')||[]);
   if(statsData.length===0){
@@ -3134,6 +3309,27 @@ function renderStats(){
 }
 
 function renderTeams(){
+  const grid = document.getElementById('teamsGrid');
+  if(!grid) return;
+  // Pull from Supabase so teams show on all devices
+  dbGetRegs().then(function(rows){
+    if(rows && rows.length){
+      const mapped = rows.map(function(r){
+        return {
+          id:r.id, team:r.team, company:r.company,
+          c1:r.country1, country1:r.country1,
+          companyLogo:r.company_logo,
+          staffPlayers:r.staff_players||[],
+          nonStaffPlayers:r.non_staff_players||[],
+          status:r.status
+        };
+      });
+      cacheSet('pitchcwc_regs', mapped);
+    }
+    _doRenderTeams();
+  }).catch(function(){ _doRenderTeams(); });
+}
+function _doRenderTeams(){
   const grid = document.getElementById('teamsGrid');
   if(!grid) return;
   const regs = (cacheGet('pitchcwc_regs')||[]);
@@ -3245,6 +3441,8 @@ function changeOffPw() {
 function doLogout() {
   adminLoggedIn = false;
   currentRole = null;
+  localStorage.removeItem('pitchcwc_role');
+  if(typeof updateNavForLogin==='function') updateNavForLogin();
   // Re-show all tabs
   ['atab3','atab4','atab5','atab6','at3','at4','at5','at6'].forEach(function(id){
     var t = document.getElementById(id);
@@ -3429,6 +3627,7 @@ function drawSave() {
     dbSaveGroup(gn, gs[gn]);
   });
   cacheSet('pitchcwc_groups', gs);
+  Object.keys(gs).forEach(function(gn){ dbSaveGroup(gn, gs[gn]); });
   toast('✅ Groups saved! Go to Fixtures tab to generate the schedule.');
 }
 
@@ -3820,6 +4019,630 @@ document.addEventListener('visibilitychange', function() {
 });
 // ================================================================
 // END AUTO-PING
+// ================================================================
+
+// ── SESSION RESTORE ────────────────────────────────────────────
+(function restoreSession(){
+  var savedRole = localStorage.getItem('pitchcwc_role');
+  if(!savedRole) return;
+
+  // Restore login state
+  adminLoggedIn = true;
+  currentRole   = savedRole;
+
+  // Hide restricted tabs for officials
+  if(savedRole === 'official'){
+    ['atab3','atab4','atab5','atab6','atab7'].forEach(function(id){
+      var t = document.getElementById(id);
+      if(t) t.style.display = 'none';
+    });
+  }
+
+  // Wait for DOM to be ready then navigate to admin
+  function goToAdmin() {
+    var rb = document.getElementById('role-badge');
+    if(rb) rb.textContent = savedRole==='admin' ? 'Admin' : 'Match Official';
+
+    // Show admin page directly
+    document.querySelectorAll('.page').forEach(function(p){ p.style.display='none'; });
+    var adminPage = document.getElementById('page-admin');
+    if(adminPage) adminPage.style.display = 'block';
+
+    // Activate first tab
+    var firstTab = savedRole==='official' ? 1 : 1;
+    var tab = document.getElementById('atab-content'+firstTab);
+    if(tab) tab.style.display = 'block';
+    var btn = document.getElementById('atab'+firstTab);
+    if(btn) btn.classList.add('active');
+
+    // Update nav
+    document.querySelectorAll('.nav-link').forEach(function(l){ l.classList.remove('active'); });
+    document.querySelectorAll('.mob-nav-btn').forEach(function(b){ b.classList.remove('active'); });
+
+    // Initialize the tab content
+    if(typeof initScoresTab === 'function') initScoresTab();
+
+    console.log('Session restored: ' + savedRole);
+  // Update nav pill
+  setTimeout(function(){ updateNavForLogin(); }, 50);
+  }
+
+  // Run after DOM is ready
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', goToAdmin);
+  } else {
+    goToAdmin();
+  }
+})();
+// ── END SESSION RESTORE ───────────────────────────────────────────────────────────────────────────
+
+// ================================================================
+// SMART PLAYER DROPDOWNS — Stats & Scores
+// ================================================================
+
+// Build a lookup of all players from approved registrations
+function getAllPlayers() {
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var players = [];
+  regs.forEach(function(reg) {
+    var flag = (reg.c1||reg.country1||'').split(' ')[0] || '🏳️';
+    var teamName = reg.team || reg.company || '';
+    var allP = [...(reg.staffPlayers||[]), ...(reg.nonStaffPlayers||[])];
+    allP.forEach(function(p) {
+      players.push({
+        name:     p.name||'',
+        jersey:   p.jersey||'',
+        position: p.position||'',
+        size:     p.size||'',
+        team:     teamName,
+        flag:     flag,
+        type:     reg.staffPlayers && reg.staffPlayers.includes(p) ? 'Staff' : 'Import'
+      });
+    });
+  });
+  return players;
+}
+
+function getTeams() {
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  return regs.map(function(r){ return {name:r.team||r.company, flag:(r.c1||r.country1||'').split(' ')[0]||'🏳️'}; });
+}
+
+// ── STATS TAB ─────────────────────────────────────────────────
+function initStatDropdowns() {
+  var teamSel = document.getElementById('stat-team-sel');
+  if (!teamSel) return;
+  // Load from DB first
+  dbGetRegs().then(function(rows){
+    if(rows&&rows.length){
+      var mapped=rows.map(function(r){
+        return {id:r.id,team:r.team,company:r.company,c1:r.country1,country1:r.country1,
+          companyLogo:r.company_logo||'',staffPlayers:r.staff_players||[],
+          nonStaffPlayers:r.non_staff_players||[],status:r.status};
+      });
+      cacheSet('pitchcwc_regs',mapped);
+    }
+    _buildStatTeamDropdown();
+  }).catch(function(){ _buildStatTeamDropdown(); });
+}
+
+function _buildStatTeamDropdown() {
+  var teamSel = document.getElementById('stat-team-sel');
+  if (!teamSel) return;
+  var teams = getTeams();
+  teamSel.innerHTML = '<option value="">— Select team —</option>' +
+    teams.map(function(t){
+      return '<option value="'+t.name+'">'+t.flag+' '+t.name+'</option>';
+    }).join('');
+}
+
+function statTeamChanged() {
+  var teamVal  = document.getElementById('stat-team-sel').value;
+  var playerSel = document.getElementById('stat-player-sel');
+  var saveBtn   = document.getElementById('stat-save-btn');
+  var info      = document.getElementById('stat-player-info');
+
+  // Reset
+  playerSel.innerHTML = '<option value="">— Select player —</option>';
+  playerSel.disabled  = !teamVal;
+  if (saveBtn) { saveBtn.disabled=true; saveBtn.style.opacity='.5'; }
+  if (info) info.style.display = 'none';
+
+  if (!teamVal) return;
+
+  var all = getAllPlayers().filter(function(p){ return p.team===teamVal; });
+  playerSel.innerHTML = '<option value="">— Select player —</option>' +
+    all.map(function(p){
+      return '<option value="'+p.name+'">#'+p.jersey+' '+p.name+' ('+p.position+')</option>';
+    }).join('');
+
+  // Set hidden team field
+  var tf = document.getElementById('stat-team');
+  if(tf) tf.value = teamVal;
+}
+
+function statPlayerChanged() {
+  var teamVal    = document.getElementById('stat-team-sel').value;
+  var playerName = document.getElementById('stat-player-sel').value;
+  var saveBtn    = document.getElementById('stat-save-btn');
+  var info       = document.getElementById('stat-player-info');
+
+  var pf = document.getElementById('stat-player');
+  if(pf) pf.value = playerName;
+
+  if (!playerName) {
+    if(saveBtn){saveBtn.disabled=true;saveBtn.style.opacity='.5';}
+    if(info) info.style.display='none';
+    return;
+  }
+
+  var all    = getAllPlayers();
+  var player = all.find(function(p){ return p.name===playerName && p.team===teamVal; });
+  if (!player) return;
+
+  // Auto-fill hidden fields
+  var ff = document.getElementById('stat-flag');
+  if(ff) ff.value = player.flag;
+
+  // Show info card
+  var jd = document.getElementById('stat-jersey-display');
+  var pd = document.getElementById('stat-pos-display');
+  var fd = document.getElementById('stat-flag-display');
+  if(jd) jd.textContent = '#'+player.jersey;
+  if(pd) pd.textContent = player.position;
+  if(fd) fd.textContent = player.flag;
+  if(info) info.style.display = 'block';
+
+  // Load existing stats if any
+  var existing = (cacheGet('pitchcwc_stats')||[]).find(function(s){ return s.name===playerName; });
+  if(existing) {
+    var g = document.getElementById('stat-goals');    if(g) g.value = existing.goals||0;
+    var a = document.getElementById('stat-assists');  if(a) a.value = existing.assists||0;
+    var c = document.getElementById('stat-cs');       if(c) c.value = existing.cs||0;
+    var sv= document.getElementById('stat-save');     if(sv) sv.value = existing.save_pct||existing.save||0;
+  } else {
+    var g2=document.getElementById('stat-goals');    if(g2) g2.value=0;
+    var a2=document.getElementById('stat-assists');  if(a2) a2.value=0;
+    var c2=document.getElementById('stat-cs');       if(c2) c2.value=0;
+    var sv2=document.getElementById('stat-save');    if(sv2) sv2.value=0;
+  }
+
+  if(saveBtn){saveBtn.disabled=false;saveBtn.style.opacity='1';}
+}
+
+// ── SCORES TAB — Goalscorer dropdowns ─────────────────────────
+function scorerTeamChanged() {
+  var side      = document.getElementById('scorer-side').value;
+  var playerSel = document.getElementById('scorer-player-sel');
+  var addBtn    = document.getElementById('add-scorer-btn');
+  var info      = document.getElementById('scorer-player-info');
+
+  playerSel.innerHTML = '<option value="">— Select player —</option>';
+  playerSel.disabled  = !side;
+  if(addBtn){addBtn.disabled=true;addBtn.style.opacity='.5';}
+  if(info) info.style.display='none';
+  document.getElementById('scorer-name').value = '';
+
+  if (!side) return;
+
+  // Get team name from the current match
+  var matchSel = document.getElementById('admin-match-sel');
+  if (!matchSel || !matchSel.value) {
+    playerSel.innerHTML = '<option value="">— Select a match first —</option>';
+    return;
+  }
+
+  var matches  = cacheGet('pitchcwc_matches')||[];
+  var match    = matches.find(function(m){ return String(m.id)===String(matchSel.value); });
+  if (!match) return;
+
+  var teamName = side==='home' ? match.home : match.away;
+
+  // Get players from that team
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var reg  = regs.find(function(r){ return r.team===teamName || r.company===teamName; });
+
+  if (!reg) {
+    // No registration found — allow manual entry
+    playerSel.innerHTML = '<option value="__manual__">Enter manually...</option>';
+    playerSel.disabled = false;
+    return;
+  }
+
+  var allP = [...(reg.staffPlayers||[]),...(reg.nonStaffPlayers||[])];
+  playerSel.disabled = false;
+  playerSel.innerHTML = '<option value="">— Select player —</option>' +
+    allP.map(function(p){
+      return '<option value="'+p.name+'">#'+p.jersey+' '+p.name+' ('+p.position+')</option>';
+    }).join('') +
+    '<option value="__manual__">✏️ Enter manually...</option>';
+}
+
+function scorerPlayerChanged() {
+  var sel    = document.getElementById('scorer-player-sel');
+  var val    = sel ? sel.value : '';
+  var info   = document.getElementById('scorer-player-info');
+  var addBtn = document.getElementById('add-scorer-btn');
+  var nameHidden = document.getElementById('scorer-name');
+
+  if (!val || val==='__manual__') {
+    if(info) info.style.display='none';
+    if(nameHidden) nameHidden.value='';
+    // For manual — show a text input
+    if(val==='__manual__') {
+      var manual = document.getElementById('scorer-manual-input');
+      if(!manual) {
+        var div = document.createElement('div');
+        div.style.marginTop='8px';
+        div.innerHTML = '<label class="form-label">Player Name / Jersey #</label><input type="text" class="form-input" id="scorer-manual-input" placeholder="e.g. Haziq or #10">';
+        sel.parentNode.appendChild(div);
+        document.getElementById('scorer-manual-input').addEventListener('input', function(){
+          if(nameHidden) nameHidden.value = this.value;
+          if(addBtn && this.value.trim()){addBtn.disabled=false;addBtn.style.opacity='1';}
+          else if(addBtn){addBtn.disabled=true;addBtn.style.opacity='.5';}
+        });
+      }
+      document.getElementById('scorer-manual-input').style.display='block';
+    }
+    return;
+  }
+
+  // Hide manual input if switching back
+  var manual = document.getElementById('scorer-manual-input');
+  if(manual) manual.style.display='none';
+
+  if(nameHidden) nameHidden.value = val;
+
+  // Find player details
+  var side = document.getElementById('scorer-side').value;
+  var matchSel = document.getElementById('admin-match-sel');
+  var matches  = cacheGet('pitchcwc_matches')||[];
+  var match    = matches.find(function(m){ return String(m.id)===String(matchSel.value); });
+  if(!match) return;
+
+  var teamName = side==='home' ? match.home : match.away;
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  var reg  = regs.find(function(r){ return r.team===teamName || r.company===teamName; });
+  if(!reg) return;
+
+  var allP = [...(reg.staffPlayers||[]),...(reg.nonStaffPlayers||[])];
+  var player = allP.find(function(p){ return p.name===val; });
+  if(!player) return;
+
+  // Show info
+  var jd = document.getElementById('scorer-jersey-display');
+  var nd = document.getElementById('scorer-name-display');
+  var pd = document.getElementById('scorer-pos-display');
+  if(jd) jd.textContent = '#'+player.jersey;
+  if(nd) nd.textContent = player.name;
+  if(pd) pd.textContent = player.position;
+  if(info) info.style.display='block';
+
+  if(addBtn){addBtn.disabled=false;addBtn.style.opacity='1';}
+}
+
+
+// ================================================================
+// END SMART DROPDOWNS
+// ================================================================
+
+// ================================================================
+// SCORES & STATS EDIT TABLES
+// ================================================================
+
+function refreshScoresTable() {
+  dbGetMatches().then(function(rows){
+    if(rows&&rows.length) cacheSet('pitchcwc_matches', rows);
+    renderScoresTable();
+  }).catch(function(){ renderScoresTable(); });
+}
+
+function renderScoresTable() {
+  var el = document.getElementById('scores-table');
+  if (!el) return;
+  var matches = cacheGet('pitchcwc_matches')||[];
+  if (!matches.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No matches yet — generate fixtures first.</div>';
+    return;
+  }
+  // Summary totals
+  var total = matches.length;
+  var live  = matches.filter(function(m){return m.status==='live';}).length;
+  var ft    = matches.filter(function(m){return m.status==='ft';}).length;
+  var upcoming = matches.filter(function(m){return m.status==='upcoming';}).length;
+  var totalGoals = matches.reduce(function(s,m){return s+(m.scoreH||0)+(m.scoreA||0);},0);
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  [['Total Matches',total,'var(--white)'],['Live',live,'#E74C3C'],['Full Time',ft,'#2ECC71'],['Total Goals',totalGoals,'var(--gold)']].forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:10px 14px;text-align:center">'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:26px;font-weight:900;color:'+s[2]+'">'+s[1]+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px">'+s[0]+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  // Group by day
+  var byDay = {};
+  matches.forEach(function(m){
+    var k='Day '+(m.day||1)+' — '+(m.dayLabel||'');
+    if(!byDay[k]) byDay[k]=[];
+    byDay[k].push(m);
+  });
+
+  Object.entries(byDay).forEach(function(e){
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px">'+e[0]+'</div>';
+    html += '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;min-width:560px">';
+    html += '<thead><tr style="background:var(--panel3)">'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Match</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:80px">Score</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:70px">Status</th>'
+      +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Scorers</th>'
+      +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:110px">Actions</th>'
+      +'</tr></thead><tbody>';
+
+    e[1].forEach(function(m){
+      var sc = m.status==='live'?'color:#E74C3C':m.status==='ft'?'color:#2ECC71':'color:var(--muted)';
+      var sl = m.status==='live'?'🔴 LIVE':m.status==='ft'?'✅ FT':'🕐 TBD';
+      var score = m.status==='upcoming'?'—':((m.scoreH||0)+' : '+(m.scoreA||0));
+      var scorers = (m.scorers||[]).map(function(s){
+        return '<span style="font-size:11px;background:rgba(201,162,39,.1);border-radius:3px;padding:1px 5px;margin:1px;display:inline-block">'+s.minute+'\' '+s.name+'</span>';
+      }).join('');
+
+      html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'
+        +'<td style="padding:9px 10px">'
+          +'<div style="font-size:11px;color:var(--muted)">'+m.group+' · P'+(m.pitch||1)+' · '+m.time+'</div>'
+          +'<div style="font-size:13px;color:var(--white);font-weight:600;margin-top:2px">'+m.home+' <span style="color:var(--dim)">vs</span> '+m.away+'</div>'
+        +'</td>'
+        +'<td style="padding:9px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:20px;font-weight:900;color:var(--white)">'+score+'</td>'
+        +'<td style="padding:9px 10px;text-align:center;font-size:12px;font-weight:700;'+sc+'">'+sl+'</td>'
+        +'<td style="padding:9px 10px;font-size:11px">'+scorers+'</td>'
+        +'<td style="padding:9px 10px;text-align:center">'
+          +'<div style="display:flex;gap:5px;justify-content:center">'
+          +'<button onclick="quickEditMatch(\''+m.id+'\')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">✏️ Edit</button>'
+          +'<button onclick="deleteMatch(\''+m.id+'\')" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">🗑️</button>'
+          +'</div>'
+        +'</td>'
+        +'</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  el.innerHTML = html;
+}
+
+function quickEditMatch(matchId) {
+  // Switch to score edit and select this match
+  var sel = document.getElementById('admin-match-sel');
+  if (!sel) return;
+  // Set the value
+  sel.value = matchId;
+  // Trigger load
+  loadMatchForEdit();
+  // Scroll to top of tab
+  var tab = document.getElementById('atab-content1');
+  if (tab) tab.scrollIntoView({behavior:'smooth', block:'start'});
+  toast('Editing match — update score above');
+}
+
+function refreshStatsTable() {
+  dbGetStats().then(function(rows){
+    if(rows&&rows.length) cacheSet('pitchcwc_stats', rows);
+    renderStatsTable();
+  }).catch(function(){ renderStatsTable(); });
+}
+
+function renderStatsTable() {
+  var el = document.getElementById('stats-table');
+  if (!el) return;
+  var stats = cacheGet('pitchcwc_stats')||[];
+  if (!stats.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No stats yet — save player stats above to see them here.</div>';
+    return;
+  }
+  var sorted = stats.slice().sort(function(a,b){return (b.goals||0)-(a.goals||0);});
+
+  // Totals
+  var totalGoals   = stats.reduce(function(s,p){return s+(p.goals||0);},0);
+  var totalAssists = stats.reduce(function(s,p){return s+(p.assists||0);},0);
+  var topScorer    = sorted[0];
+  var topAssist    = stats.slice().sort(function(a,b){return (b.assists||0)-(a.assists||0);})[0];
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">';
+  [
+    ['Players Tracked', stats.length, 'var(--white)'],
+    ['Total Goals', totalGoals, 'var(--gold)'],
+    ['Total Assists', totalAssists, 'var(--muted)'],
+    ['Top Scorer', topScorer?(topScorer.goals+'g — '+topScorer.name.split(' ')[0]):'—', '#2ECC71']
+  ].forEach(function(s){
+    html += '<div style="background:var(--panel2);border-radius:7px;padding:10px 14px;text-align:center">'
+      +'<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:'+(s[0]==='Top Scorer'?'14':'24')+'px;font-weight:900;color:'+s[2]+';line-height:1.2">'+s[1]+'</div>'
+      +'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:3px">'+s[0]+'</div>'
+      +'</div>';
+  });
+  html += '</div>';
+
+  html += '<table style="width:100%;border-collapse:collapse;min-width:520px">';
+  html += '<thead><tr style="background:var(--panel3)">'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:36px">#</th>'
+    +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Player</th>'
+    +'<th style="padding:7px 10px;text-align:left;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase">Team</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">G</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">A</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:45px">CS</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:55px">Sv%</th>'
+    +'<th style="padding:7px 10px;text-align:center;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;width:110px">Actions</th>'
+    +'</tr></thead><tbody>';
+
+  sorted.forEach(function(p, i){
+    var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,.04)">'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:900;color:var(--gold)">'+medal+(medal?'':'#'+(i+1))+'</td>'
+      +'<td style="padding:8px 10px;font-size:13px;color:var(--white);font-weight:600">'+(p.flag||'')+'&nbsp;'+p.name+'</td>'
+      +'<td style="padding:8px 10px;font-size:12px;color:var(--muted)">'+p.team+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--white)">'+(p.goals||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:700;color:var(--muted)">'+(p.assists||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted)">'+(p.cs||0)+'</td>'
+      +'<td style="padding:8px 10px;text-align:center;font-size:13px;color:var(--muted)">'+(p.save_pct||p.save||0)+'%</td>'
+      +'<td style="padding:8px 10px;text-align:center">'
+        +'<div style="display:flex;gap:5px;justify-content:center">'
+        +'<button onclick="quickEditStat(\''+p.name.replace(/\'/g,"\\'")+'\')" style="background:rgba(201,162,39,.12);border:1px solid rgba(201,162,39,.25);color:var(--gold);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">✏️ Edit</button>'
+        +'<button onclick="deleteStat(\''+p.name.replace(/\'/g,"\\'")+'\',\''+p.team.replace(/\'/g,"\\'")+'\' )" style="background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.2);color:#E74C3C;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'Barlow Condensed\',sans-serif">🗑️</button>'
+        +'</div>'
+      +'</td>'
+      +'</tr>';
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function quickEditStat(playerName) {
+  // Find the player's team and pre-select in the dropdowns
+  var stats = cacheGet('pitchcwc_stats')||[];
+  var p = stats.find(function(s){ return s.name===playerName; });
+  if (!p) return;
+
+  // Set team dropdown
+  var teamSel = document.getElementById('stat-team-sel');
+  if (teamSel) {
+    teamSel.value = p.team;
+    statTeamChanged();
+    // Then set player
+    setTimeout(function(){
+      var playerSel = document.getElementById('stat-player-sel');
+      if (playerSel) {
+        playerSel.value = playerName;
+        statPlayerChanged();
+      }
+    }, 100);
+  }
+  // Scroll to top of stats tab
+  var tab = document.getElementById('atab-content2');
+  if (tab) tab.scrollIntoView({behavior:'smooth', block:'start'});
+  toast('Editing '+playerName+' — update stats above');
+}
+
+// Auto-render tables when tabs open (already handled in adminTab n===1 and n===2)
+// Also render on init
+function initScoresTab() {
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  refreshScoresTable();
+}
+function initStatsTab() {
+  initStatDropdowns();
+  refreshStatsTable();
+}
+// ================================================================
+// END SCORES & STATS EDIT TABLES
+// ================================================================
+
+// ── DELETE FUNCTIONS ──────────────────────────────────────────
+function deleteMatch(matchId) {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  if (!confirm('Delete this match? This cannot be undone.')) return;
+  var matches = (cacheGet('pitchcwc_matches')||[]).filter(function(m){ return String(m.id)!==String(matchId); });
+  cacheSet('pitchcwc_matches', matches);
+  // Delete from Supabase
+  dbClearMatches().then(function(){
+    if(matches.length) dbSaveMatches(matches);
+  });
+  renderScoresTable();
+  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  toast('Match deleted');
+}
+
+function deleteStat(playerName, teamName) {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+  if (!confirm('Delete stats for '+playerName+'?')) return;
+  var stats = (cacheGet('pitchcwc_stats')||[]).filter(function(s){ return s.name!==playerName; });
+  cacheSet('pitchcwc_stats', stats);
+  var keepers = (cacheGet('pitchcwc_keepers')||[]).filter(function(k){ return k.name!==playerName; });
+  cacheSet('pitchcwc_keepers', keepers);
+  // Delete from Supabase — upsert with 0 stats or remove
+  sbFetch('player_stats?name=eq.'+encodeURIComponent(playerName), {method:'DELETE'});
+  renderStatsTable();
+  toast('Stats deleted for '+playerName);
+}
+
+function addNewMatch() {
+  // Open the manual match section in fixtures tab
+  adminTab(5);
+  var manual = document.getElementById('manual-add-section') || document.getElementById('manual-wrap');
+  if(manual) { manual.style.display='block'; manual.scrollIntoView({behavior:'smooth'}); }
+  toast('Go to Fixtures tab → Manual Match to add');
+}
+// ── END DELETE FUNCTIONS ──────────────────────────────────────
+
+// ================================================================
+// USER MENU
+// ================================================================
+function updateNavForLogin() {
+  var loginBtn  = document.getElementById('nav-login-btn');
+  var userPill  = document.getElementById('nav-user-pill');
+  var roleLabel = document.getElementById('nav-role-label');
+  var roleIcon  = document.getElementById('nav-role-icon');
+  var dropName  = document.getElementById('dropdown-role-name');
+
+  if (adminLoggedIn) {
+    if (loginBtn)  loginBtn.style.display  = 'none';
+    if (userPill)  userPill.style.display  = 'block';
+    var label = currentRole === 'admin' ? 'Admin' : 'Match Official';
+    var icon  = currentRole === 'admin' ? '⚙️' : '⚽';
+    if (roleLabel) roleLabel.textContent = label;
+    if (roleIcon)  roleIcon.textContent  = icon;
+    if (dropName)  dropName.textContent  = label;
+    // Hide official-only items
+    var regsBtn = document.getElementById('dd-regs-btn');
+    var fxBtn   = document.getElementById('dd-fx-btn');
+    var stBtn   = document.getElementById('dd-stats-btn');
+    if (currentRole === 'official') {
+      if (regsBtn) regsBtn.style.display = 'none';
+      if (fxBtn)   fxBtn.style.display   = 'none';
+    } else {
+      if (regsBtn) regsBtn.style.display = 'flex';
+      if (fxBtn)   fxBtn.style.display   = 'flex';
+    }
+  } else {
+    if (loginBtn)  loginBtn.style.display  = 'block';
+    if (userPill)  userPill.style.display  = 'none';
+    closeUserMenu();
+  }
+}
+
+function toggleUserMenu() {
+  var dd = document.getElementById('user-dropdown');
+  if (!dd) return;
+  dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function closeUserMenu() {
+  var dd = document.getElementById('user-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  var area = document.getElementById('nav-user-area');
+  if (area && !area.contains(e.target)) closeUserMenu();
+});
+
+// Quick nav helpers
+function goToScores()        { showPage('admin'); adminTab(1); closeUserMenu(); }
+function goToStats()         { showPage('admin'); adminTab(2); closeUserMenu(); }
+function goToRegistrations() { showPage('admin'); adminTab(3); closeUserMenu(); }
+function goToFixtures()      { showPage('admin'); adminTab(5); closeUserMenu(); }
+
+// Hook into doLogin / doLogout / restoreSession to update nav
+
+
+
+
+// Update nav on page load if session restored
+document.addEventListener('DOMContentLoaded', function() {
+  updateNavForLogin();
+});
+// Also call immediately in case DOM is already ready
+updateNavForLogin();
+// ================================================================
+// END USER MENU
 // ================================================================
 </script>
 </body>
