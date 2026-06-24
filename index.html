@@ -2441,64 +2441,6 @@ window.addEventListener('load', initCountryDropdowns);
 var KO_ROUNDS = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Final',4:'Semi Final',2:'Final'};
 
 // Build the per-day rows (date + kickoff + end time + round label)
-function fxBuildDayRows() {
-  var n = parseInt(document.getElementById('fx-num-days').value || 3);
-  var container = document.getElementById('fx-day-rows');
-  if (!container) return;
-  var baseDates = ['2026-07-05','2026-07-12','2026-07-19','2026-07-26','2026-08-02'];
-  var fmt = (document.getElementById('fx-format')||{}).value || 'group-knockout';
-  var numGroups = parseInt((document.getElementById('fx-groups')||{}).value||2);
-  var letters = 'ABCDEFGHIJKL'.split('').slice(0, numGroups);
-
-  var rows = '';
-  for (var i = 1; i <= n; i++) {
-    rows += '<div style="background:var(--panel3);border-radius:8px;padding:14px;margin-bottom:6px">'
-      // Day header row
-      + '<div style="display:grid;grid-template-columns:auto 1fr 1fr 2fr;gap:10px;align-items:end;margin-bottom:12px">'
-      + '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--gold);min-width:52px;padding-bottom:2px">Day ' + i + '</div>'
-      + '<div><label class="form-label">Date</label><input type="date" class="form-input" id="fx-date-' + i + '" value="' + (baseDates[i-1]||'') + '"></div>'
-      + '<div></div>'
-      + '<div><label class="form-label">Stage / Round</label>'
-      + '<select class="form-select" id="fx-dayround-' + i + '">'
-      + '<option value="group">Group Stage (Round Robin)</option>'
-      + '<option value="ko">Knockout Rounds</option>'
-      + '<option value="rr1">Round Robin — Matchday 1 only</option>'
-      + '<option value="rr2">Round Robin — Matchday 2 only</option>'
-      + '<option value="rr3">Round Robin — Matchday 3 only</option>'
-      + '<option value="ro32">Round of 32</option><option value="ro16">Round of 16</option>'
-      + '<option value="qf">Quarter Finals</option><option value="sf">Semi Finals</option>'
-      + '<option value="f">3rd Place + Final</option>'
-      + '</select></div>'
-      + '</div>';
-
-    // Per-group time slots
-    rows += '<div style="display:flex;flex-direction:column;gap:6px">';
-    letters.forEach(function(l) {
-      var defaultStart = l === 'A' ? '08:00' : l === 'B' ? '14:00' : l === 'C' ? '17:00' : '19:00';
-      var defaultEnd   = l === 'A' ? '13:00' : l === 'B' ? '17:00' : l === 'C' ? '20:00' : '22:00';
-      rows += '<div style="display:grid;grid-template-columns:auto 1fr 1fr auto;gap:10px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">'
-        + '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold);min-width:60px;padding-bottom:2px">Group ' + l + '</div>'
-        + '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-' + i + '-' + l + '" value="' + defaultStart + '" style="padding:7px 10px;font-size:13px"></div>'
-        + '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-end-' + i + '-' + l + '" value="' + defaultEnd + '" style="padding:7px 10px;font-size:13px"></div>'
-        + '<div style="padding-bottom:2px;font-size:11px;color:var(--muted)" id="fx-slots-' + i + '-' + l + '"></div>'
-        + '</div>';
-    });
-    rows += '</div></div>';
-  }
-  container.innerHTML = rows;
-
-  // Smart defaults for round assignments
-  if (n === 3 && fmt === 'group-knockout') {
-    var d1 = document.getElementById('fx-dayround-1'); if(d1) d1.value = 'rr1';
-    var d2 = document.getElementById('fx-dayround-2'); if(d2) d2.value = 'rr2';
-    var d3 = document.getElementById('fx-dayround-3'); if(d3) d3.value = 'ko';
-  } else if (n === 2 && fmt === 'group-knockout') {
-    var d1b = document.getElementById('fx-dayround-1'); if(d1b) d1b.value = 'group';
-    var d2b = document.getElementById('fx-dayround-2'); if(d2b) d2b.value = 'ko';
-  }
-  fxCalc();
-  updateGroupSlotCounts();
-}
 
 
 function fxFormatChange() {
@@ -2578,178 +2520,6 @@ function dayLabel(dayNum) {
   } catch(e) { return 'Day '+dayNum; }
 }
 
-function generateSchedule() {
-  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
-  var fmt   = document.getElementById('fx-format').value;
-  var g     = parseInt(document.getElementById('fx-groups').value||2);
-  var tpg   = parseInt(document.getElementById('fx-tpg').value||5);
-  var dur   = parseInt(document.getElementById('fx-duration').value||14);
-  var brk   = parseInt(document.getElementById('fx-break').value||5);
-  var cts   = parseInt(document.getElementById('fx-courts').value||2);
-  var nDays = parseInt(document.getElementById('fx-num-days').value||3);
-  var groups = (cacheGet('pitchcwc_groups')||{});
-
-  if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
-    toast('Assign teams to groups in Step 3 first','red'); return;
-  }
-
-  var slot = dur + brk;
-  var letters = 'ABCDEFGHIJKL'.split('').slice(0, g);
-
-  // ── BERGER ROUND-ROBIN: no team plays twice in same round ──────
-  function bergerRounds(teams) {
-    var n = teams.length;
-    var t = teams.slice();
-    if (n % 2 === 1) t.push('BYE');
-    var n2 = t.length;
-    var rounds = [];
-    for (var r = 0; r < n2-1; r++) {
-      var pairs = [];
-      for (var i = 0; i < n2/2; i++) {
-        var h = t[i], a = t[n2-1-i];
-        if (h !== 'BYE' && a !== 'BYE') pairs.push({home:h, away:a});
-      }
-      rounds.push(pairs);
-      // Rotate: fix t[0], rotate t[1..]
-      t = [t[0]].concat([t[t.length-1]]).concat(t.slice(1, t.length-1));
-    }
-    return rounds;
-  }
-
-  // Build rounds per group
-  var groupRounds = {};
-  var groupData   = {};
-  letters.forEach(function(l) {
-    var gName = 'Group '+l;
-    var gd    = groups[gName]||[];
-    var names = gd.map(function(t){ return typeof t==='string'?t:t.name; });
-    if (!names.length) for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gName+')');
-    groupRounds[gName] = bergerRounds(names);
-    groupData[gName]   = gd;
-  });
-
-  // Max rounds across all groups
-  var maxRounds = Math.max.apply(null, Object.values(groupRounds).map(function(r){return r.length;}));
-
-  // Read day assignments
-  var dayAssignments = {};
-  for (var d=1; d<=nDays; d++) {
-    var sel = document.getElementById('fx-dayround-'+d);
-    dayAssignments[d] = sel ? sel.value : 'group';
-  }
-
-  // Map each round index -> which day it belongs to
-  function getRoundDay(ri) {
-    // specific round assignments first
-    for (var d=1;d<=nDays;d++) {
-      var dt = dayAssignments[d];
-      if ((dt==='rr1'&&ri===0)||(dt==='rr2'&&ri===1)||(dt==='rr3'&&ri===2)||(dt==='rr4'&&ri===3)) return d;
-    }
-    // fallback: days marked 'group' or 'mixed' share remaining rounds evenly
-    var groupDays = [];
-    for (var d2=1;d2<=nDays;d2++) {
-      if (dayAssignments[d2]==='group'||dayAssignments[d2]==='mixed') groupDays.push(d2);
-    }
-    if (groupDays.length) return groupDays[ri % groupDays.length];
-    return 1;
-  }
-
-  // Track slot index per day (for time calculation)
-  var daySlotIdx = {};
-  for (var d3=1;d3<=nDays;d3++) {
-    daySlotIdx[d3]=0;
-    letters.forEach(function(l){ daySlotIdx[d3+'-'+l]=0; });
-  }
-
-  function makeMatch(home, away, hd, ad, gName, dayNum) {
-    // Try group-specific timing first (e.g. fx-start-1-A), fall back to day-wide
-    var grpLetter = gName && gName.indexOf('Group ') === 0 ? gName.replace('Group ','') : null;
-    var grpKey = grpLetter ? (dayNum + '-' + grpLetter) : null;
-    var startEl = grpKey ? document.getElementById('fx-start-'+grpKey) : null;
-    if (!startEl) startEl = document.getElementById('fx-start-'+dayNum);
-    var start   = startEl ? startEl.value : '08:00';
-    var sPts    = start.split(':').map(Number);
-    // Use a per-group-per-day slot counter
-    var slotKey = grpKey || String(dayNum);
-    var si      = daySlotIdx[slotKey]||0;
-    var timeSlot = Math.floor(si/cts);
-    var pitch    = (si%cts)+1;
-    var startM   = sPts[0]*60+sPts[1] + timeSlot*slot;
-    daySlotIdx[slotKey] = si+1;
-    return {
-      id: Date.now()+si+(Math.floor(Math.random()*9999)),
-      group: gName,
-      home: home, hFlag: (hd&&hd.flag)||'🔵', hCompany: (hd&&hd.company)||'',
-      away: away, aFlag: (ad&&ad.flag)||'🔴', aCompany: (ad&&ad.company)||'',
-      scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
-      day: dayNum, dayLabel: dayLabel(dayNum),
-      time: fmtMins(startM), endTime: fmtMins(startM+dur),
-      pitch: pitch, duration: dur
-    };
-  }
-
-  var allMatches = [];
-
-  if (fmt !== 'knockout-only') {
-    // ── INTERLEAVED SCHEDULING ─────────────────────────────────
-    // For each round, schedule all groups on different pitches simultaneously
-    // This ensures teams from different groups never clash for pitch time
-    // and within a group no team plays twice in the same round
-    for (var ri=0; ri<maxRounds; ri++) {
-      var dayNum = getRoundDay(ri);
-      // Collect all matches for this round across all groups
-      var roundMatches = [];
-      letters.forEach(function(l) {
-        var gName  = 'Group '+l;
-        var pairs  = groupRounds[gName]&&groupRounds[gName][ri];
-        if (!pairs) return;
-        var gd     = groupData[gName]||[];
-        pairs.forEach(function(pair) {
-          var hd = gd.find(function(t){return (t.name||t)===pair.home;})||{};
-          var ad = gd.find(function(t){return (t.name||t)===pair.away;})||{};
-          roundMatches.push({home:pair.home,away:pair.away,hd:hd,ad:ad,gName:gName,dayNum:dayNum});
-        });
-      });
-      // Sort: interleave groups so Group A match 1 is on P1, Group B match 1 is on P2
-      // This is already natural since we push Group A then Group B
-      roundMatches.forEach(function(m) {
-        allMatches.push(makeMatch(m.home, m.away, m.hd, m.ad, m.gName, m.dayNum));
-      });
-    }
-  }
-
-  // ── KNOCKOUT BRACKET ──────────────────────────────────────────
-  if (fmt !== 'league') {
-    var koT = fmt==='knockout-only'
-      ? parseInt(document.getElementById('fx-ko-teams').value||32)
-      : g*2;
-    var koDays = [];
-    for (var d4=1;d4<=nDays;d4++) {
-      var dt2 = dayAssignments[d4];
-      if (dt2==='ko'||dt2==='mixed'||dt2==='ro32'||dt2==='ro16'||dt2==='qf'||dt2==='sf'||dt2==='f') koDays.push(d4);
-    }
-    if (!koDays.length) koDays = [nDays];
-    var koDayIdx = 0;
-    var rem = koT;
-    while (rem >= 2) {
-      var rn = KO_ROUNDS[rem]||'Round of '+rem;
-      var nm = rem/2;
-      for (var mi=0;mi<nm;mi++) {
-        var kd = koDays[Math.min(koDayIdx, koDays.length-1)];
-        allMatches.push(makeMatch('TBD '+(mi*2+1), 'TBD '+(mi*2+2), {flag:'🔵'}, {flag:'🔴'}, rn, kd));
-        allMatches[allMatches.length-1].isKO = true;
-      }
-      rem = rem/2;
-      koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
-    }
-  }
-
-  cacheSet('pitchcwc_matches', allMatches);
-  dbClearMatches().then(function(){ dbSaveMatches(allMatches); });
-  renderFixturesAdmin();
-  populateAdminMatchSel();
-  toast('Generated '+allMatches.length+' matches — balanced schedule');
-}
 
 function generateKnockoutBracket() {
   if (!adminLoggedIn) { toast('Not authorised','red'); return; }
@@ -3678,6 +3448,255 @@ function drawReset() {
 // ================================================================
 // END DRAW ENGINE
 // ================================================================
+
+
+function fxBuildDayRows() {
+  var n   = parseInt(document.getElementById('fx-num-days').value || 3);
+  var con = document.getElementById('fx-day-rows');
+  if (!con) return;
+  var fmt = (document.getElementById('fx-format')||{}).value || 'group-knockout';
+  var ng  = parseInt((document.getElementById('fx-groups')||{}).value || 2);
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+
+  // Default dates: Jul 5, 12, 19 weekly
+  var baseDates = ['2026-07-05','2026-07-12','2026-07-19','2026-07-26','2026-08-02'];
+
+  // Default round labels per day index
+  var defaultRounds = [];
+  if (fmt === 'group-knockout') {
+    if (n === 3) defaultRounds = ['rr1','rr2','ko'];
+    else if (n === 2) defaultRounds = ['group','ko'];
+    else for (var d=0;d<n;d++) defaultRounds.push(d===n-1?'ko':'rr'+(d+1));
+  } else {
+    for (var d=0;d<n;d++) defaultRounds.push('rr'+(d+1));
+  }
+
+  var roundOptions =
+    '<option value="rr1">Round Robin — Matchday 1</option>' +
+    '<option value="rr2">Round Robin — Matchday 2</option>' +
+    '<option value="rr3">Round Robin — Matchday 3</option>' +
+    '<option value="rr4">Round Robin — Matchday 4</option>' +
+    '<option value="group">All Group Stage Matches</option>' +
+    '<option value="ko">Knockout Rounds (QF + SF + Final)</option>' +
+    '<option value="ro16">Round of 16</option>' +
+    '<option value="qf">Quarter Finals</option>' +
+    '<option value="sf">Semi Finals + Final</option>';
+
+  var html = '';
+  for (var i=1; i<=n; i++) {
+    var defDate  = baseDates[i-1] || '';
+    var defRound = defaultRounds[i-1] || 'rr'+i;
+    html += '<div style="background:var(--panel3);border-radius:8px;padding:14px;margin-bottom:8px">';
+    // Day header
+    html += '<div style="display:grid;grid-template-columns:60px 1fr 1fr 2fr;gap:10px;align-items:end;margin-bottom:12px">';
+    html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--gold)">Day '+i+'</div>';
+    html += '<div><label class="form-label">Date</label><input type="date" class="form-input" id="fx-date-'+i+'" value="'+defDate+'"></div>';
+    html += '<div><label class="form-label">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'" value="08:00"></div>';
+    html += '<div><label class="form-label">Stage / Round</label><select class="form-select" id="fx-dayround-'+i+'">'+roundOptions+'</select></div>';
+    html += '</div>';
+    // Per-group time rows
+    html += '<div style="display:flex;flex-direction:column;gap:6px">';
+    letters.forEach(function(l) {
+      var defStart = l==='A'?'08:00':l==='B'?'14:00':l==='C'?'17:00':'19:00';
+      var defEnd   = l==='A'?'13:00':l==='B'?'17:00':l==='C'?'20:00':'22:00';
+      html += '<div style="display:grid;grid-template-columns:70px 1fr 1fr auto;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+      html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold)">Group '+l+'</div>';
+      html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'-'+l+'" value="'+defStart+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-end-'+i+'-'+l+'" value="'+defEnd+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div style="font-size:11px;color:var(--muted)" id="fx-slots-'+i+'-'+l+'"></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+  con.innerHTML = html;
+
+  // Set default round values
+  for (var di=1; di<=n; di++) {
+    var sel = document.getElementById('fx-dayround-'+di);
+    if (sel && defaultRounds[di-1]) sel.value = defaultRounds[di-1];
+  }
+  fxCalc();
+}
+
+function generateSchedule() {
+  if (!adminLoggedIn) { toast('Not authorised','red'); return; }
+
+  var fmt   = document.getElementById('fx-format').value;
+  var ng    = parseInt(document.getElementById('fx-groups').value || 2);
+  var tpg   = parseInt(document.getElementById('fx-tpg').value || 5);
+  var dur   = parseInt(document.getElementById('fx-duration').value || 14);
+  var brk   = parseInt(document.getElementById('fx-break').value || 5);
+  var cts   = parseInt(document.getElementById('fx-courts').value || 2);
+  var nDays = parseInt(document.getElementById('fx-num-days').value || 3);
+  var slot  = dur + brk;
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+  var groups  = cacheGet('pitchcwc_groups') || {};
+
+  if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
+    toast('Assign teams to groups in Step 3 first','red'); return;
+  }
+
+  // Read day assignments
+  var dayAssign = {};
+  for (var d=1; d<=nDays; d++) {
+    var sel = document.getElementById('fx-dayround-'+d);
+    dayAssign[d] = sel ? sel.value : 'rr'+d;
+  }
+
+  // ── Berger round-robin ──────────────────────────────────────
+  function bergerRounds(teams) {
+    var t = teams.slice();
+    if (t.length % 2 === 1) t.push('BYE');
+    var n2 = t.length, rounds = [];
+    for (var r=0; r<n2-1; r++) {
+      var pairs = [];
+      for (var i=0; i<n2/2; i++) {
+        if (t[i]!=='BYE' && t[n2-1-i]!=='BYE')
+          pairs.push({home:t[i], away:t[n2-1-i]});
+      }
+      rounds.push(pairs);
+      t = [t[0]].concat([t[t.length-1]]).concat(t.slice(1,t.length-1));
+    }
+    return rounds;
+  }
+
+  // Build rounds per group
+  var groupRounds = {}, groupData = {};
+  letters.forEach(function(l) {
+    var gn = 'Group '+l;
+    var gd = groups[gn] || [];
+    var names = gd.map(function(t){ return typeof t==='string'?t:t.name; });
+    if (!names.length) for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gn+')');
+    // Double round robin = run berger twice
+    var rr1 = bergerRounds(names);
+    var rr2 = bergerRounds(names.slice().reverse()); // reverse for different matchups
+    groupRounds[gn] = {rr1: rr1, rr2: rr2, all: rr1.concat(rr2)};
+    groupData[gn] = gd;
+  });
+
+  // Map day type → which rounds to schedule
+  // rr1 = first set of rounds, rr2 = second set, ko = knockout
+  function getRoundsForDay(dayType, gn) {
+    var gr = groupRounds[gn];
+    if (!gr) return [];
+    if (dayType === 'rr1') return gr.rr1;
+    if (dayType === 'rr2') return gr.rr2;
+    if (dayType === 'group') return gr.all;
+    return [];
+  }
+
+  // Track slot index per group per day key
+  var daySlotIdx = {};
+
+  function makeMatch(home, away, hd, ad, gName, dayNum, grpLetter) {
+    var slotKey = grpLetter ? (dayNum+'-'+grpLetter) : String(dayNum);
+    var startEl = document.getElementById('fx-start-'+dayNum+'-'+grpLetter) ||
+                  document.getElementById('fx-start-'+dayNum);
+    var start = startEl ? startEl.value : '08:00';
+    var sPts  = start.split(':').map(Number);
+    var si    = daySlotIdx[slotKey] || 0;
+    var timeSlot = Math.floor(si/cts);
+    var pitch    = (si%cts)+1;
+    var startM   = sPts[0]*60+sPts[1] + timeSlot*slot;
+    daySlotIdx[slotKey] = si+1;
+
+    return {
+      id: Date.now()+si+(Math.floor(Math.random()*9999)),
+      group:gName, round:gName,
+      home:home, hFlag:(hd&&hd.flag)||'🔵', hCompany:(hd&&hd.company)||'',
+      away:away, aFlag:(ad&&ad.flag)||'🔴', aCompany:(ad&&ad.company)||'',
+      scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
+      day:dayNum, dayLabel:dayLabel(dayNum),
+      time:fmtMins(startM), endTime:fmtMins(startM+dur),
+      pitch:pitch, duration:dur
+    };
+  }
+
+  var allMatches = [];
+
+  // ── Schedule group stage matches per day ───────────────────
+  if (fmt !== 'knockout-only') {
+    for (var dayNum=1; dayNum<=nDays; dayNum++) {
+      var dtype = dayAssign[dayNum];
+      if (dtype === 'ko' || dtype === 'ro16' || dtype === 'qf' || dtype === 'sf') continue;
+
+      // For each round in this day, interleave groups across pitches
+      var maxRounds = 0;
+      letters.forEach(function(l) {
+        var rounds = getRoundsForDay(dtype, 'Group '+l);
+        if (rounds.length > maxRounds) maxRounds = rounds.length;
+      });
+
+      for (var ri=0; ri<maxRounds; ri++) {
+        letters.forEach(function(l) {
+          var gn = 'Group '+l;
+          var rounds = getRoundsForDay(dtype, gn);
+          var pair = rounds[ri];
+          if (!pair) return;
+          var gd = groupData[gn] || [];
+          var hd = gd.find(function(t){ return (t.name||t)===pair.home; }) || {};
+          var ad = gd.find(function(t){ return (t.name||t)===pair.away; }) || {};
+          allMatches.push(makeMatch(pair.home, pair.away, hd, ad, gn, dayNum, l));
+        });
+      }
+    }
+  }
+
+  // ── Knockout bracket ───────────────────────────────────────
+  if (fmt !== 'league') {
+    var KOR = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Final',4:'Semi Final',2:'Final'};
+    var koT = fmt==='knockout-only'
+      ? parseInt(document.getElementById('fx-ko-teams').value||32)
+      : ng*2;
+
+    // Find KO days
+    var koDays = [];
+    for (var d=1; d<=nDays; d++) {
+      var dt = dayAssign[d];
+      if (dt==='ko'||dt==='ro16'||dt==='qf'||dt==='sf') koDays.push(d);
+    }
+    if (!koDays.length) koDays = [nDays];
+
+    var koDayIdx = 0;
+    var rem = koT;
+    while (rem >= 2) {
+      var rn = KOR[rem] || 'Round of '+rem;
+      var nm = rem/2;
+      var kd = koDays[Math.min(koDayIdx, koDays.length-1)];
+      for (var mi=0; mi<nm; mi++) {
+        var slotKey2 = 'ko-'+kd;
+        var startEl2 = document.getElementById('fx-start-'+kd) || {};
+        var start2 = startEl2.value || '08:00';
+        var sPts2  = start2.split(':').map(Number);
+        var si2    = daySlotIdx[slotKey2] || 0;
+        var startM2 = sPts2[0]*60+sPts2[1] + Math.floor(si2/cts)*slot;
+        allMatches.push({
+          id: Date.now()+si2+(Math.floor(Math.random()*9999)),
+          group:rn, round:rn, isKO:true,
+          home:'TBD '+(mi*2+1), hFlag:'🔵', hCompany:'',
+          away:'TBD '+(mi*2+2), aFlag:'🔴', aCompany:'',
+          scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
+          day:kd, dayLabel:dayLabel(kd),
+          time:fmtMins(startM2), endTime:fmtMins(startM2+dur),
+          pitch:(si2%cts)+1, duration:dur
+        });
+        daySlotIdx[slotKey2] = si2+1;
+      }
+      rem = rem/2;
+      koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
+      // Small gap between rounds
+      var kd2 = koDays[Math.min(koDayIdx, koDays.length-1)];
+      var gapKey = 'ko-'+kd2;
+      daySlotIdx[gapKey] = (daySlotIdx[gapKey]||0) + cts; // add a break slot
+    }
+  }
+
+  cacheSet('pitchcwc_matches', allMatches);
+  dbClearMatches().then(function(){ dbSaveMatches(allMatches); });
+  renderFixturesAdmin();
+  populateScoreSel();
+  toast('Generated '+allMatches.length+' matches — Double Round Robin + Knockout');
+}
 
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.style.display='none');
