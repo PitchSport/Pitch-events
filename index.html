@@ -1517,35 +1517,46 @@ async function sbFetch(table, opts) {
   opts = opts || {};
   var url = SB_URL + '/rest/v1/' + table;
   var params = [];
-  if (opts.select)  params.push('select=' + opts.select);
-  if (opts.eq)      params.push(opts.eq);
-  if (opts.order)   params.push('order=' + opts.order);
-  if (opts.limit)   params.push('limit=' + opts.limit);
+  if (opts.select) params.push('select=' + opts.select);
+  if (opts.eq)     params.push(opts.eq);
+  if (opts.order)  params.push('order=' + opts.order);
+  if (opts.limit)  params.push('limit=' + opts.limit);
   if (params.length) url += '?' + params.join('&');
+
+  var method = opts.method || 'GET';
   var headers = {
     'apikey': SB_KEY,
-    'Authorization': 'Bearer ' + SB_KEY,
-    'Content-Type': 'application/json',
-    'Prefer': opts.prefer || 'return=representation'
+    'Authorization': 'Bearer ' + SB_KEY
   };
-  var res = await fetch(url, {
-    method: opts.method || 'GET',
-    headers: headers,
-    body: opts.body ? JSON.stringify(opts.body) : undefined
-  });
-  if (!res.ok) {
-    var txt = await res.text();
-    console.error('Supabase error:', res.status, txt);
-    return null;
+
+  // Only add Content-Type and Prefer for write operations
+  if (method !== 'GET') {
+    headers['Content-Type'] = 'application/json';
+    if (opts.prefer) headers['Prefer'] = opts.prefer;
+    else if (method === 'POST') headers['Prefer'] = 'return=representation';
   }
-  var text = await res.text();
-  if (!text) return [];
-  try { return JSON.parse(text); } catch(e) { return []; }
+
+  try {
+    var fetchOpts = { method: method, headers: headers };
+    if (opts.body) fetchOpts.body = JSON.stringify(opts.body);
+    var res = await fetch(url, fetchOpts);
+    if (!res.ok) {
+      var txt = await res.text();
+      console.error('Supabase ' + method + ' error:', res.status, txt);
+      return null;
+    }
+    var text = await res.text();
+    if (!text || text === '') return method === 'GET' ? [] : {};
+    try { return JSON.parse(text); } catch(e) { return []; }
+  } catch(err) {
+    console.error('Supabase fetch failed:', err.message);
+    throw err;
+  }
 }
 
 // ── REGISTRATIONS ──────────────────────────────────────────────
 async function dbGetRegs() {
-  return await sbFetch('registrations', {select:'*', order:'created_at.desc'}) || [];
+  return await sbFetch('registrations', {select:'*', order:'created_at.desc', limit:'100'}) || [];
 }
 async function dbSaveReg(reg) {
   return await sbFetch('registrations', {
