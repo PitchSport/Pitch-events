@@ -2270,6 +2270,9 @@ function submitRegistration() {
 
 // ===== ADMIN: REGISTRATIONS =====
 function renderRegistrations() {
+  // Show loading state
+  var list = document.getElementById('registrations-list');
+  if (list) list.innerHTML = '<div style="text-align:center;padding:28px;color:var(--muted)"><div style="font-size:24px;margin-bottom:8px">⏳</div>Loading registrations from database...</div>';
   // Pull from Supabase so registrations from ALL devices appear
   dbGetRegs().then(function(rows) {
     const regs = rows.map(function(r) {
@@ -2284,9 +2287,13 @@ function renderRegistrations() {
     });
     cacheSet('pitchcwc_regs', regs);
     _doRenderRegs(regs);
-  }).catch(function(){
+  }).catch(function(err){
+    console.error('Supabase error:', err);
+    const list = document.getElementById('registrations-list');
+    if (list) list.innerHTML = '<div style="text-align:center;padding:28px;color:#E74C3C"><div style="font-size:28px;margin-bottom:10px">⚠️</div><strong>Could not connect to database.</strong><br><span style="font-size:13px;color:var(--muted)">Check your internet connection and try again.<br>Error: ' + (err && err.message ? err.message : 'Network error') + '</span><br><br><button class="btn-save" onclick="renderRegistrations()" style="width:auto;padding:8px 20px;font-size:14px">↻ Retry</button></div>';
+    // Still try cache as fallback
     const regs = (cacheGet('pitchcwc_regs')||[]);
-    _doRenderRegs(regs);
+    if (regs.length) _doRenderRegs(regs);
   });
 }
 function _doRenderRegs(regs) {
