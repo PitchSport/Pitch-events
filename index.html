@@ -2514,6 +2514,7 @@ function updateRegStatus(id, status) {
   if (reg) {
     reg.status = status;
     cacheSet('pitchcwc_regs', regs);
+    dbUpdateRegStatus(id, status);
     // When approved: auto-populate stats with player list
     if(status === 'Approved'){
       const statsData = (cacheGet('pitchcwc_stats')||[]);
@@ -2795,7 +2796,9 @@ function addFixture() {
   const homeName = home.replace(/\p{Emoji}/gu,'').trim();
   const awayName = away.replace(/\p{Emoji}/gu,'').trim();
   matches.push({id,group:stage,home:homeName,hFlag,hCompany:hco,away:awayName,aFlag,aCompany:aco,scoreH:0,scoreA:0,status:'upcoming',minute:'',day:parseInt(day),time:formatTime(time)});
-  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
+  cacheSet('pitchcwc_matches', matches);
+  // Update only this specific match in Supabase
+  dbUpdateMatch(m).catch(function(){ dbSaveMatches([m]); });
   // Clear fields
   ['fx-home','fx-away','fx-hcompany','fx-acompany'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   renderFixturesAdmin();
@@ -2853,7 +2856,9 @@ function renderFixturesAdmin(){
 
 function deleteFixture(id){
   const matches = (cacheGet('pitchcwc_matches')||[]).filter(m=>m.id!==id);
-  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
+  cacheSet('pitchcwc_matches', matches);
+  // Save the specific updated match to Supabase
+  dbUpdateMatch(m).catch(function(){ dbSaveMatches([m]); });
   renderFixturesAdmin();
   toast('Match removed');
 }
@@ -2881,6 +2886,7 @@ function saveGroup(){
   const groups = (cacheGet('pitchcwc_groups')||{});
   groups[grpName] = teamList;
   cacheSet('pitchcwc_groups', groups);
+  dbSaveGroup(groupName||gName, teamList);
   renderSavedGroupsPreview();
   updateEstimatedDuration();
   toast('✅ ' + grpName + ' saved — ' + teamList.length + ' teams');
@@ -2910,7 +2916,7 @@ function adminTab(n) {
   if (btn) btn.classList.add('active');
   if (n===1) { initScoresTab(); }
   if (n===2) { initStatsTab(); }
-  if (n===3) renderRegistrations();
+  if (n===3) { syncAndRender('regs', renderRegistrations); }
   if (n===5) initFixtureTab();
 }
 
@@ -2987,7 +2993,11 @@ function saveScore(){
   m.status = document.getElementById('admin-match-status').value;
   m.minute = document.getElementById('admin-match-minute').value;
   m.scorers = currentScorers.slice();
-  cacheSet('pitchcwc_matches',matches); dbSaveMatches([matches[matches.length-1]]);
+  cacheSet('pitchcwc_matches', matches);
+  dbUpdateMatch(m).catch(function(e){ 
+    console.warn('dbUpdateMatch failed, trying upsert:', e);
+    dbSaveMatches([m]); 
+  });
 
   // Auto-update stats from scorers
   updateStatsFromScorers(m);
@@ -3147,6 +3157,7 @@ function renderMatch(m){
 function renderLive(){
   const grid = document.getElementById('liveMatchGrid');
   if(!grid) return;
+  if(typeof _doRenderLive==='function'){ _doRenderLive(); return; }
   // Pull latest matches and announcement from Supabase
   Promise.all([
     dbGetMatches().catch(function(){return [];}),
@@ -3207,14 +3218,9 @@ function _doRenderLive(){
   grid.innerHTML = html;
 }
 
-function renderFixtures(filter='all'){
-  const grid = document.getElementById('fixturesGrid');
-  if(!grid) return;
-  // Always pull from Supabase so other devices see latest fixtures
-  dbGetMatches().then(function(rows){
-    if(rows && rows.length){ cacheSet('pitchcwc_matches', rows); }
-    _doRenderFixtures(filter);
-  }).catch(function(){ _doRenderFixtures(filter); });
+function renderFixtures(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderFixtures(filter);
 }
 function _doRenderFixtures(filter){
   const grid = document.getElementById('fixturesGrid');
@@ -3234,14 +3240,9 @@ function filterFixtures(f,btn){
   renderFixtures(f);
 }
 
-function renderStandings(){
-  const grid = document.getElementById('standingsGrid');
-  if(!grid) return;
-  // Pull from Supabase so standings show on all devices
-  dbGetGroups().then(function(obj){
-    if(obj && Object.keys(obj).length){ cacheSet('pitchcwc_groups', obj); }
-    _doRenderStandings();
-  }).catch(function(){ _doRenderStandings(); });
+function renderStandings(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderStandings(filter);
 }
 function _doRenderStandings(){
   const grid = document.getElementById('standingsGrid');
@@ -3266,11 +3267,9 @@ function _doRenderStandings(){
   `).join('');
 }
 
-function renderStats(){
-  dbGetStats().then(function(rows){
-    if(rows&&rows.length) cacheSet('pitchcwc_stats',rows);
-    _doRenderStats();
-  }).catch(function(){_doRenderStats();});
+function renderStats(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderStats(filter);
 }
 function _doRenderStats(){
   const statsData = (cacheGet('pitchcwc_stats')||[]);
@@ -3308,26 +3307,9 @@ function _doRenderStats(){
     </div>`).join('');
 }
 
-function renderTeams(){
-  const grid = document.getElementById('teamsGrid');
-  if(!grid) return;
-  // Pull from Supabase so teams show on all devices
-  dbGetRegs().then(function(rows){
-    if(rows && rows.length){
-      const mapped = rows.map(function(r){
-        return {
-          id:r.id, team:r.team, company:r.company,
-          c1:r.country1, country1:r.country1,
-          companyLogo:r.company_logo,
-          staffPlayers:r.staff_players||[],
-          nonStaffPlayers:r.non_staff_players||[],
-          status:r.status
-        };
-      });
-      cacheSet('pitchcwc_regs', mapped);
-    }
-    _doRenderTeams();
-  }).catch(function(){ _doRenderTeams(); });
+function renderTeams(filter){
+  if(typeof filter === 'undefined') filter = null;
+  _doRenderTeams(filter);
 }
 function _doRenderTeams(){
   const grid = document.getElementById('teamsGrid');
@@ -3897,6 +3879,64 @@ function generateSchedule() {
   toast('Generated '+allMatches.length+' matches — Double Round Robin + Knockout');
 }
 
+
+// ================================================================
+// UNIVERSAL SYNC HELPER
+// Always pulls latest data from Supabase before rendering
+// ================================================================
+function syncAndRender(dataType, callback) {
+  var promise;
+  if (dataType === 'matches') {
+    promise = dbGetMatches().then(function(rows) {
+      if (rows && rows.length) cacheSet('pitchcwc_matches', rows);
+    });
+  } else if (dataType === 'groups') {
+    promise = dbGetGroups().then(function(obj) {
+      if (obj && Object.keys(obj).length) cacheSet('pitchcwc_groups', obj);
+    });
+  } else if (dataType === 'stats') {
+    promise = dbGetStats().then(function(rows) {
+      if (rows && rows.length) cacheSet('pitchcwc_stats', rows);
+    });
+  } else if (dataType === 'regs') {
+    promise = dbGetRegs().then(function(rows) {
+      if (rows && rows.length) {
+        var mapped = rows.map(function(r) {
+          return {
+            id:r.id, team:r.team||'', company:r.company||'',
+            c1:r.country1||'', country1:r.country1||'',
+            companyLogo:r.company_logo||'',
+            staffPlayers:r.staff_players||[],
+            nonStaffPlayers:r.non_staff_players||[],
+            officials:r.officials||[],
+            contactPerson:r.contact_person||'',
+            contactNo:r.contact_no||'',
+            email:r.email||'',
+            signatory:r.signatory||'',
+            sigRole:r.sig_role||'',
+            sigDate:r.sig_date||'',
+            status:r.status||'Pending',
+            submittedAt:r.submitted_at||''
+          };
+        });
+        cacheSet('pitchcwc_regs', mapped);
+      }
+    });
+  } else {
+    promise = Promise.resolve();
+  }
+
+  promise.catch(function(e) {
+    console.warn('Sync failed for '+dataType+':', e && e.message);
+  }).finally(function() {
+    // Always render, even if DB failed (uses cache)
+    if (typeof callback === 'function') callback();
+  });
+}
+// ================================================================
+// END SYNC HELPER
+// ================================================================
+
 function showPage(id){
   document.querySelectorAll('.page').forEach(p=>p.style.display='none');
   document.querySelectorAll('.nav-link').forEach(l=>l.classList.remove('active'));
@@ -3909,12 +3949,24 @@ function showPage(id){
   if(mob) mob.classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
   document.getElementById('navLinks').classList.remove('open');
-  if(id==='live'){renderLive();startLiveClock();}
-  if(id==='fixtures'){renderFixtures();}
-  if(id==='standings'){renderStandings();}
-  if(id==='stats'){renderStats();}
-  if(id==='teams'){renderTeams();}
-  if(id==='admin'){populateAdminMatchSel();}
+
+  // Always sync from Supabase when switching pages
+  if(id==='live'){
+    syncAndRender('matches', renderLive);
+    startLiveClock();
+  }
+  if(id==='fixtures')  syncAndRender('matches',  renderFixtures);
+  if(id==='standings') syncAndRender('groups',   renderStandings);
+  if(id==='stats')     syncAndRender('stats',    renderStats);
+  if(id==='teams')     syncAndRender('regs',     renderTeams);
+  if(id==='admin'){
+    syncAndRender('matches', function(){
+      if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
+      if(typeof renderScoresTable==='function') setTimeout(renderScoresTable, 300);
+    });
+    syncAndRender('regs', function(){/* preload regs cache */});
+    syncAndRender('groups', function(){/* preload groups cache */});
+  }
 }
 
 function toggleMenu(){document.getElementById('navLinks').classList.toggle('open')}
@@ -3930,11 +3982,13 @@ function saveAnnouncement(){
   if(!adminLoggedIn){toast('Not authorised','red');return;}
   const txt = document.getElementById('admin-announce').value.trim();
   localStorage.setItem('pitchcwc_announcement', txt);
+  dbSetSetting('announcement', txt);
   toast('Announcement published');
 }
 
 function clearAnnouncement(){
   localStorage.removeItem('pitchcwc_announcement');
+  dbSetSetting('announcement','');
   const el = document.getElementById('admin-announce');
   if(el) el.value='';
   toast('Announcement cleared');
@@ -4644,6 +4698,8 @@ updateNavForLogin();
 // ================================================================
 // END USER MENU
 // ================================================================
+
+function genKO(){ generateKnockoutBracket(); }
 </script>
 </body>
 </html>
