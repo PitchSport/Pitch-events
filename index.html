@@ -2856,59 +2856,58 @@ var _drawDone   = false;
 
 function drawInit() {
   if (!adminLoggedIn) { toast('Not authorised','red'); return; }
-  var ng  = parseInt(document.getElementById('draw-num-groups').value||2);
-  var tpg = parseInt(document.getElementById('draw-tpg').value||5);
+  var ng  = parseInt(document.getElementById('draw-num-groups').value || 2);
+  var tpg = parseInt(document.getElementById('draw-tpg').value || 5);
   _drawTPG = tpg;
 
-  // Load approved teams from cache then DB
-  // Always refresh from DB to ensure we have all approved teams
-  var regs = [];
-  var cachedRegs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
-  if (!cachedRegs.length) {
-    // Try DB
-    dbGetRegs().then(function(rows){
-      var approved = rows.filter(function(r){ return r.status==='Approved'; });
-      if (!approved.length) { toast('No approved teams found — approve registrations first','red'); return; }
-      cacheSet('pitchcwc_regs', rows);
-      var mapped = approved.map(function(r){
-        return {
-          name:    r.team||r.company||('Team '+r.id),
-          flag:    (r.country1||r.c1||r.flag||'').split(' ')[0]||'🏳️',
-          company: r.company||r.team||'',
-          id:      r.id
-        };
-      }).filter(function(t){ return t.name && t.name.trim(); });
-      _drawStart(ng, tpg, mapped);
-    });
-    return;
-  }
-  // Also fetch fresh from DB to ensure nothing is missing
-  dbGetRegs().then(function(rows){
-    var freshApproved = rows.filter(function(r){ return r.status==='Approved'; });
-    if (freshApproved.length >= cachedRegs.length) {
-      cacheSet('pitchcwc_regs', rows);
-      var freshTeams = freshApproved.map(function(r){
-        return {
-          name:    r.team||r.company||('Team '+r.id),
-          flag:    (r.country1||r.c1||r.flag||'').split(' ')[0]||'🏳️',
-          company: r.company||r.team||'',
-          id:      r.id
-        };
-      }).filter(function(t){ return t.name && t.name.trim(); });
-      _drawStart(ng, tpg, freshTeams);
+  toast('Loading approved teams...', 'blue');
+
+  // Always load fresh from DB — single call, no double-start
+  dbGetRegs().then(function(rows) {
+    var approved = rows.filter(function(r) { return r.status === 'Approved'; });
+    if (!approved.length) {
+      // Fallback to cache
+      var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+      if (!cached.length) {
+        toast('No approved teams found. Approve registrations first.', 'red');
+        return;
+      }
+      approved = cached;
+    }
+    cacheSet('pitchcwc_regs', rows);
+    var teams = approved.map(function(r) {
+      return {
+        name:    r.team || r.company || ('Team ' + r.id),
+        flag:    (r.country1 || r.c1 || r.flag || '').split(' ')[0] || '🏳️',
+        company: r.company || r.team || '',
+        id:      r.id
+      };
+    }).filter(function(t) { return t.name && t.name.trim(); });
+
+    if (!teams.length) {
+      toast('No valid teams found. Check registrations.', 'red');
       return;
     }
-  }).catch(function(){});
-  // Start with cached while DB loads
-  var teams = cachedRegs.map(function(r){
-    return {
-      name:    r.team||r.company||('Team '+r.id),
-      flag:    (r.c1||r.country1||r.flag||'').split(' ')[0]||'🏳️',
-      company: r.company||r.team||'',
-      id:      r.id
-    };
-  }).filter(function(t){ return t.name && t.name.trim(); });
-  _drawStart(ng, tpg, teams);
+    toast(teams.length + ' teams loaded. Starting draw!');
+    _drawStart(ng, tpg, teams);
+  }).catch(function(err) {
+    // DB failed — use cache
+    var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+    if (!cached.length) {
+      toast('Could not load teams. Check connection.', 'red');
+      return;
+    }
+    var teams = cached.map(function(r) {
+      return {
+        name:    r.team || r.company || ('Team ' + r.id),
+        flag:    (r.c1 || r.country1 || r.flag || '').split(' ')[0] || '🏳️',
+        company: r.company || r.team || '',
+        id:      r.id
+      };
+    }).filter(function(t) { return t.name && t.name.trim(); });
+    toast(teams.length + ' teams from cache. Starting draw!');
+    _drawStart(ng, tpg, teams);
+  });
 }
 
 function _drawStart(ng, tpg, teams) {
