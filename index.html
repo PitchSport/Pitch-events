@@ -2852,15 +2852,25 @@ function drawInit() {
       var approved = rows.filter(function(r){ return r.status==='Approved'; });
       if (!approved.length) { toast('No approved teams found — approve registrations first','red'); return; }
       var mapped = approved.map(function(r){
-        return { name:r.team||r.company, flag:(r.country1||r.c1||'').split(' ')[0]||'🏳️', company:r.company, id:r.id };
-      });
+        return {
+          name:    r.team||r.company||('Team '+r.id),
+          flag:    (r.country1||r.c1||r.flag||'').split(' ')[0]||'🏳️',
+          company: r.company||r.team||'',
+          id:      r.id
+        };
+      }).filter(function(t){ return t.name && t.name.trim(); });
       _drawStart(ng, tpg, mapped);
     });
     return;
   }
   var teams = regs.map(function(r){
-    return { name:r.team, flag:(r.c1||r.country1||'').split(' ')[0]||'🏳️', company:r.company, id:r.id };
-  });
+    return {
+      name:    r.team||r.company||('Team '+r.id),
+      flag:    (r.c1||r.country1||r.flag||'').split(' ')[0]||'🏳️',
+      company: r.company||r.team||'',
+      id:      r.id
+    };
+  }).filter(function(t){ return t.name && t.name.trim(); });
   _drawStart(ng, tpg, teams);
 }
 
@@ -2925,13 +2935,23 @@ function drawPull() {
 
   // Check if draw is complete
   var allFull = _drawNames.every(function(gn){ return _drawGroups[gn].length >= _drawTPG; });
-  if (allFull || _drawBowl.length===0) {
+  if (allFull) {
     _drawDone = true;
     var pullBtn = document.getElementById('draw-pull-btn');
     if (pullBtn) { pullBtn.disabled=true; pullBtn.textContent='✅ Draw Complete'; }
     var saveBtn = document.getElementById('draw-save-btn');
     if (saveBtn) saveBtn.style.display='block';
     toast('🎉 Draw complete! All teams assigned.');
+  } else if (_drawBowl.length===0) {
+    // Bowl empty but groups not full — some teams may not have loaded
+    _drawDone = true;
+    var pullBtn2 = document.getElementById('draw-pull-btn');
+    if (pullBtn2) { pullBtn2.disabled=true; pullBtn2.textContent='⚠️ Bowl Empty'; }
+    var saveBtn2 = document.getElementById('draw-save-btn');
+    if (saveBtn2) saveBtn2.style.display='block';
+    var missing = _drawNames.map(function(gn){ return _drawTPG - (_drawGroups[gn]||[]).length; }).reduce(function(a,b){return a+b;},0);
+    if (missing > 0) toast('⚠️ Bowl empty but '+missing+' slot(s) unfilled. Check approved registrations.','red');
+    else toast('🎉 Draw complete!');
   }
   _drawRefresh();
 }
@@ -2990,7 +3010,8 @@ function _drawRefresh() {
 
 function drawSave() {
   if (!adminLoggedIn) { toast('Not authorised','red'); return; }
-  if (!_drawDone && _drawBowl.length > 0) {
+  // Always allow save (even partial draw)
+  if (!_drawDone) {
     if (!confirm('Draw is not fully complete. Save current assignments anyway?')) return;
   }
   var gs = cacheGet('pitchcwc_groups')||{};
