@@ -2317,9 +2317,9 @@ function renderFixturesAdmin(){
               ${m.endTime?`<span style="color:var(--muted);font-size:11px">→ ${m.endTime}</span>`:''}
               ${m.pitch?`<span style="background:rgba(197,162,39,.1);padding:2px 6px;border-radius:4px;font-size:10px;color:var(--gold);font-weight:700">P${m.pitch}</span>`:''}
               <span style="font-size:16px">${m.hFlag}</span>
-              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px">${m.home}</span>
+              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px">${m.home||'TBD'}</span>
               <span style="color:var(--muted);font-size:11px;font-weight:700">vs</span>
-              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px;text-align:right">${m.away}</span>
+              <span style="font-weight:700;color:var(--white);flex:1;min-width:80px;text-align:right">${m.away||'TBD'}</span>
               <span style="font-size:16px">${m.aFlag}</span>
               <span style="padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:${m.status==='live'?'rgba(231,76,60,.2)':m.status==='ft'?'rgba(46,204,113,.1)':'rgba(255,255,255,.06)'};color:${m.status==='live'?'#E74C3C':m.status==='ft'?'#2ECC71':'var(--muted)'}">${m.status==='live'?'LIVE':m.status==='ft'?'FT':'TBD'}</span>
               <button onclick="deleteFixture(${m.id})" style="background:rgba(231,76,60,.08);border:1px solid rgba(231,76,60,.18);color:#E74C3C;padding:2px 7px;border-radius:4px;font-size:11px;cursor:pointer;flex-shrink:0">✕</button>
@@ -3367,25 +3367,21 @@ function generateSchedule() {
   var slotKO    = durKO + brk;
   var slot  = slotGroup; // overridden below
   var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
-  var groups  = cacheGet('pitchcwc_groups') || {};
-
-  // Also load fresh from DB in background for cross-device sync
-  if (!Object.keys(groups).length) {
-    // Try DB first, then proceed
-    toast('Loading groups from database...','blue');
-    dbGetGroups().then(function(dbGroups) {
-      if(dbGroups && Object.keys(dbGroups).length) {
-        cacheSet('pitchcwc_groups', dbGroups);
-        toast('Groups loaded! Click Generate again.');
-      } else {
-        toast('No groups found — assign teams in Step 3 first','red');
-      }
-    }).catch(function(){ toast('Could not load groups — check connection','red'); });
-    return;
-  }
-
+  // Always load fresh groups from Supabase first for cross-device accuracy
+  var groups = cacheGet('pitchcwc_groups') || {};
+  
+  // If groups empty, try DB
   if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
-    toast('Assign teams to groups in Step 3 first','red'); return;
+    toast('Loading groups from Supabase...', 'blue');
+    dbGetGroups().then(function(dbGroups) {
+      if (dbGroups && Object.keys(dbGroups).length) {
+        cacheSet('pitchcwc_groups', dbGroups);
+        toast('✅ Groups loaded! Click Generate Schedule again.');
+      } else {
+        toast('No groups saved yet — use Step 3 to assign teams, then Save Group.', 'red');
+      }
+    }).catch(function() { toast('Could not reach Supabase — check connection', 'red'); });
+    return;
   }
 
   // Read day assignments
@@ -3416,12 +3412,18 @@ function generateSchedule() {
   var groupRounds = {}, groupData = {};
   letters.forEach(function(l) {
     var gn = 'Group '+l;
-    var gd = groups[gn] || [];
-    var names = gd.map(function(t){ 
-      if (typeof t==='string') return t;
-      return t.name || t.team || t.company || ('Team '+(gd.indexOf(t)+1));
-    }).filter(function(n){ return n && n.trim(); });
-    if (!names.length) for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gn+')');
+    var gd = (groups[gn] || []);
+    if (!Array.isArray(gd)) gd = [];
+    var names = [];
+    gd.forEach(function(t, ti) {
+      var n = '';
+      if (typeof t === 'string') n = t;
+      else if (t && t.name) n = t.name;
+      else if (t && t.team) n = t.team;
+      else if (t && t.company) n = t.company;
+      if (n && n.trim()) names.push(n.trim());
+    });
+    if (!names.length) { for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gn+')'); };
     // Double round robin = run berger twice
     var rr1 = bergerRounds(names);
     var rr2 = bergerRounds(names.slice().reverse()); // reverse for different matchups
@@ -3554,10 +3556,14 @@ function generateSchedule() {
   }
 
   cacheSet('pitchcwc_matches', allMatches);
-  dbClearMatches().then(function(){ dbSaveMatches(allMatches); });
+  // Save matches to Supabase
+  dbClearMatches().then(function(){ return dbSaveMatches(allMatches); })
+    .then(function(){ toast('✅ '+allMatches.length+' matches generated and saved to Supabase!'); })
+    .catch(function(){ toast('⚠️ Generated locally but Supabase save failed — click Publish to retry','red'); });
+  // Save groups to Supabase too (ensure cross-device)
+  Object.keys(groups).forEach(function(gn){ dbSaveGroup(gn, groups[gn]); });
   renderFixturesAdmin();
-  populateScoreSel();
-  toast('Generated '+allMatches.length+' matches — Double Round Robin + Knockout');
+  if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
 }
 
 
