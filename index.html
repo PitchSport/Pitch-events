@@ -1162,25 +1162,44 @@ async function dbGetMatches() {
   });
 }
 async function dbSaveMatches(matches) {
-  // Upsert all matches
+  if (!matches || !matches.length) return;
   var rows = matches.map(function(m) {
     return {
-      id:m.id, grp:m.group, round:m.round||m.group,
-      home:m.home, h_flag:m.hFlag||'🔵', h_company:m.hCompany||'',
-      away:m.away, a_flag:m.aFlag||'🔴', a_company:m.aCompany||'',
-      score_h:m.scoreH||0, score_a:m.scoreA||0,
-      status:m.status||'upcoming', minute:m.minute||'',
-      scorers:m.scorers||[],
-      day:m.day||1, day_label:m.dayLabel||'Day '+(m.day||1),
-      time:m.time||'', end_time:m.endTime||'',
-      pitch:m.pitch||1, duration:m.duration||14, is_ko:m.isKO||false
+      id:         m.id,
+      grp:        m.group   || '',
+      round:      m.round   || m.group || '',
+      home:       m.home    || '',
+      h_flag:     m.hFlag   || '🔵',
+      h_company:  m.hCompany|| '',
+      away:       m.away    || '',
+      a_flag:     m.aFlag   || '🔴',
+      a_company:  m.aCompany|| '',
+      score_h:    m.scoreH  || 0,
+      score_a:    m.scoreA  || 0,
+      status:     m.status  || 'upcoming',
+      minute:     m.minute  || '',
+      scorers:    m.scorers || [],
+      day:        m.day     || 1,
+      day_label:  m.dayLabel|| ('Day '+(m.day||1)),
+      time:       m.time    || '',
+      end_time:   m.endTime || '',
+      pitch:      m.pitch   || 1,
+      duration:   m.duration|| 14,
+      is_ko:      m.isKO    || false
     };
   });
-  return await sbFetch('matches', {
-    method:'POST',
-    prefer:'resolution=merge-duplicates,return=representation',
-    body:rows
-  });
+
+  // Send in batches of 50 to avoid size limits
+  var batchSize = 50;
+  for (var b = 0; b < rows.length; b += batchSize) {
+    var batch = rows.slice(b, b + batchSize);
+    await sbFetch('matches', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: batch
+    });
+  }
+  console.log('dbSaveMatches: saved', rows.length, 'matches to Supabase');
 }
 async function dbUpdateMatch(m) {
   return await sbFetch('matches?id=eq.'+m.id, {
@@ -1194,7 +1213,8 @@ async function dbUpdateMatch(m) {
 }
 async function dbClearMatches() {
   try {
-    await sbFetch('matches?id=gte.0', {method:'DELETE'});
+    // Delete all matches - using neq to match all rows
+    await sbFetch('matches', {method:'DELETE', eq:'id=gt.0'});
     return true;
   } catch(e) {
     console.warn('dbClearMatches failed:', e && e.message);
@@ -3351,7 +3371,7 @@ function fxDayRoundChanged(dayNum) {
 
 
 
-function generateSchedule() {
+async function generateSchedule() {
   if (!adminLoggedIn) { toast('Not authorised','red'); return; }
 
   var fmt   = document.getElementById('fx-format').value;
@@ -3367,21 +3387,26 @@ function generateSchedule() {
   var slotKO    = durKO + brk;
   var slot  = slotGroup; // overridden below
   var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
-  // Always load fresh groups from Supabase first for cross-device accuracy
+  // Load groups - try cache first, then Supabase
   var groups = cacheGet('pitchcwc_groups') || {};
   
-  // If groups empty, try DB
+  // If groups empty, load from Supabase
   if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
     toast('Loading groups from Supabase...', 'blue');
-    dbGetGroups().then(function(dbGroups) {
+    try {
+      var dbGroups = await dbGetGroups();
       if (dbGroups && Object.keys(dbGroups).length) {
         cacheSet('pitchcwc_groups', dbGroups);
-        toast('✅ Groups loaded! Click Generate Schedule again.');
+        groups = dbGroups;
+        toast('Groups loaded from Supabase ✅');
       } else {
-        toast('No groups saved yet — use Step 3 to assign teams, then Save Group.', 'red');
+        toast('No groups found — save your group assignments first', 'red');
+        return;
       }
-    }).catch(function() { toast('Could not reach Supabase — check connection', 'red'); });
-    return;
+    } catch(e) {
+      toast('Could not load groups — check connection', 'red');
+      return;
+    }
   }
 
   // Read day assignments
@@ -3556,14 +3581,24 @@ function generateSchedule() {
   }
 
   cacheSet('pitchcwc_matches', allMatches);
-  // Save matches to Supabase
-  dbClearMatches().then(function(){ return dbSaveMatches(allMatches); })
-    .then(function(){ toast('✅ '+allMatches.length+' matches generated and saved to Supabase!'); })
-    .catch(function(){ toast('⚠️ Generated locally but Supabase save failed — click Publish to retry','red'); });
-  // Save groups to Supabase too (ensure cross-device)
-  Object.keys(groups).forEach(function(gn){ dbSaveGroup(gn, groups[gn]); });
   renderFixturesAdmin();
   if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
+  // Save groups + matches to Supabase
+  try {
+    toast('Saving '+allMatches.length+' matches to Supabase...','blue');
+    // Save groups first
+    for (var gk=0; gk<Object.keys(groups).length; gk++) {
+      var gkn = Object.keys(groups)[gk];
+      await dbSaveGroup(gkn, groups[gkn]);
+    }
+    // Clear old matches then save new ones
+    await dbClearMatches();
+    await dbSaveMatches(allMatches);
+    toast('✅ '+allMatches.length+' matches saved to Supabase — all devices will sync!');
+  } catch(e) {
+    toast('⚠️ Saved locally. Click 🌐 Publish to sync to other devices.','red');
+    console.error('Save to Supabase failed:', e&&e.message);
+  }
 }
 
 
@@ -3591,33 +3626,30 @@ function syncAndRender(dataType, callback) {
     };
   }
 
-  var promise;
-  if (dataType === 'matches') {
-    promise = dbGetMatches().then(function(rows) {
-      cacheSet('pitchcwc_matches', rows || []);
-    });
-  } else if (dataType === 'groups') {
-    promise = dbGetGroups().then(function(obj) {
-      if (obj && Object.keys(obj).length) cacheSet('pitchcwc_groups', obj);
-    });
-  } else if (dataType === 'stats') {
-    promise = dbGetStats().then(function(rows) {
-      if (rows) cacheSet('pitchcwc_stats', rows);
-    });
-  } else if (dataType === 'regs') {
-    promise = dbGetRegs().then(function(rows) {
-      if (rows && rows.length) {
-        cacheSet('pitchcwc_regs', rows.map(mapReg));
-      }
-    });
-  } else {
-    promise = Promise.resolve();
-  }
+  function done() { if (typeof callback === 'function') callback(); }
 
-  promise
-    .catch(function(e) { console.warn('syncAndRender failed ['+dataType+']:', e&&e.message); })
-    .then(function() { if (typeof callback === 'function') callback(); })
-    .catch(function() { if (typeof callback === 'function') callback(); });
+  if (dataType === 'matches') {
+    dbGetMatches()
+      .then(function(rows) { cacheSet('pitchcwc_matches', rows||[]); done(); })
+      .catch(function(e) { console.warn('syncAndRender matches failed:', e&&e.message); done(); });
+  } else if (dataType === 'groups') {
+    dbGetGroups()
+      .then(function(obj) { if(obj&&Object.keys(obj).length) cacheSet('pitchcwc_groups',obj); done(); })
+      .catch(function(e) { console.warn('syncAndRender groups failed:', e&&e.message); done(); });
+  } else if (dataType === 'stats') {
+    dbGetStats()
+      .then(function(rows) { if(rows) cacheSet('pitchcwc_stats',rows); done(); })
+      .catch(function(e) { console.warn('syncAndRender stats failed:', e&&e.message); done(); });
+  } else if (dataType === 'regs') {
+    dbGetRegs()
+      .then(function(rows) {
+        if(rows&&rows.length) cacheSet('pitchcwc_regs', rows.map(mapReg));
+        done();
+      })
+      .catch(function(e) { console.warn('syncAndRender regs failed:', e&&e.message); done(); });
+  } else {
+    done();
+  }
 }
 // ================================================================
 // END SYNC HELPER
@@ -4794,28 +4826,34 @@ async function fxPublishFixtures() {
     toast('Nothing to publish — generate fixtures first','red'); return;
   }
   var statusEl = document.getElementById('fx-publish-status');
-  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing...'; statusEl.style.color='var(--gold)'; }
+  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing to Supabase...'; statusEl.style.color='var(--gold)'; }
 
   try {
-    // Clear then save matches
-    if(matches.length){
-      await dbClearMatches();
-      await dbSaveMatches(matches);
-    }
-    // Save each group
+    var steps = [];
+
+    // Save groups
     var gnKeys = Object.keys(groups);
     for(var gi=0; gi<gnKeys.length; gi++){
       await dbSaveGroup(gnKeys[gi], groups[gnKeys[gi]]);
+      steps.push('Group '+gnKeys[gi]);
     }
-    if(statusEl){
-      statusEl.textContent = '✅ Published! '+matches.length+' matches and '+gnKeys.length+' groups live on website.';
-      statusEl.style.color = '#2ECC71';
+
+    // Clear and save matches
+    if(matches.length){
+      await dbClearMatches();
+      await dbSaveMatches(matches);
+      steps.push(matches.length+' matches');
     }
-    toast('✅ Fixtures published to website!');
+
+    var msg = '✅ Published: '+steps.join(', ')+' — now live on all devices!';
+    if(statusEl){ statusEl.textContent=msg; statusEl.style.color='#2ECC71'; }
+    toast(msg);
+
   } catch(e) {
-    var msg = (e&&e.message) ? e.message : 'Network error — check connection';
-    if(statusEl){ statusEl.textContent = '❌ '+msg; statusEl.style.color='#E74C3C'; }
-    toast('Publish failed: '+msg,'red');
+    var errMsg = '❌ Publish failed: '+(e&&e.message||'check console for details');
+    console.error('fxPublishFixtures error:', e);
+    if(statusEl){ statusEl.textContent=errMsg; statusEl.style.color='#E74C3C'; }
+    toast(errMsg,'red');
   }
 }
 
