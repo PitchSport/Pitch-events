@@ -2191,9 +2191,18 @@ function exportSchedule() {
 function loadRegisteredTeams() {
   var sel = document.getElementById('grp-picker');
   if (!sel) return;
-  // Try cache first
-  var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){return r.status==='Approved';});
-  function populatePicker(approved) {
+  sel.innerHTML = '<option value="">Loading teams...</option>';
+  dbGetRegs().then(function(rows){
+    if(rows && rows.length) {
+      var mapped = rows.map(function(r){
+        return {id:r.id, team:r.team||'', company:r.company||'',
+          c1:r.country1||'', country1:r.country1||'',
+          staffPlayers:r.staff_players||[], nonStaffPlayers:r.non_staff_players||[],
+          status:r.status||'Pending'};
+      });
+      cacheSet('pitchcwc_regs', mapped);
+    }
+    var approved = (rows||[]).filter(function(r){ return r.status==='Approved'; });
     if (!approved.length) {
       sel.innerHTML = '<option value="">No approved teams yet</option>';
       return;
@@ -2203,15 +2212,17 @@ function loadRegisteredTeams() {
       var name = r.team||r.company||'Unknown';
       return '<option value="'+name+'">'+flag+' '+name+'</option>';
     }).join('');
-    toast(approved.length+' teams loaded');
-  }
-  if (cached.length) populatePicker(cached);
-  // Always refresh from DB
-  dbGetRegs().then(function(rows){
-    cacheSet('pitchcwc_regs', rows);
-    var fresh = rows.filter(function(r){ return r.status==='Approved'; });
-    populatePicker(fresh);
-  }).catch(function(){ if (!cached.length) sel.innerHTML='<option value="">Could not load teams</option>'; });
+    toast(approved.length+' approved teams loaded');
+  }).catch(function(){
+    var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+    if(cached.length){
+      sel.innerHTML = cached.map(function(r){
+        return '<option value="'+(r.team||r.company)+'">'+(r.team||r.company)+'</option>';
+      }).join('');
+    } else {
+      sel.innerHTML = '<option value="">Could not load teams — check connection</option>';
+    }
+  });
 }
 
 function grpPickerChange() {
@@ -2372,10 +2383,45 @@ function adminTab(n) {
   if (el) el.style.display='block';
   var btn = document.getElementById('atab'+n);
   if (btn) btn.classList.add('active');
-  if (n===1) { initScoresTab(); }
-  if (n===2) { initStatsTab(); }
-  if (n===3) { syncAndRender('regs', renderRegistrations); }
-  if (n===5) initFixtureTab();
+
+  // Always sync from DB first, then initialize the tab
+  if (n===1) {
+    ensureTeamsLoaded(function(){
+      syncAndRender('matches', function(){
+        if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
+        if(typeof refreshScoresTable==='function') refreshScoresTable();
+      });
+    });
+  } else if (n===2) {
+    ensureTeamsLoaded(function(){
+      if(typeof initStatDropdowns==='function') initStatDropdowns();
+      syncAndRender('stats', function(){
+        if(typeof refreshStatsTable==='function') refreshStatsTable();
+      });
+    });
+  } else if (n===3) {
+    syncAndRender('regs', function(){
+      if(typeof renderRegistrations==='function') renderRegistrations();
+    });
+  } else if (n===4) {
+    // Announce tab - nothing to sync
+  } else if (n===5) {
+    // Fixtures tab - sync matches + groups
+    syncAndRender('regs', function(){
+      if(typeof loadRegisteredTeams==='function') loadRegisteredTeams();
+    });
+    syncAndRender('groups', function(){
+      if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
+    });
+    syncAndRender('matches', function(){
+      if(typeof renderFixturesAdmin==='function') renderFixturesAdmin();
+    });
+  } else if (n===6) {
+    // Settings tab
+  } else if (n===7) {
+    // Draw tab - preload regs
+    syncAndRender('regs', function(){/* teams ready for draw */});
+  }
 }
 
 
@@ -3513,10 +3559,29 @@ function generateSchedule() {
 // Always pulls latest data from Supabase before rendering
 // ================================================================
 function syncAndRender(dataType, callback) {
+  function mapReg(r) {
+    return {
+      id:r.id, team:r.team||'', company:r.company||'',
+      c1:r.country1||'', country1:r.country1||'',
+      companyLogo:r.company_logo||'',
+      staffPlayers:r.staff_players||[],
+      nonStaffPlayers:r.non_staff_players||[],
+      officials:r.officials||[],
+      contactPerson:r.contact_person||'',
+      contactNo:r.contact_no||'',
+      email:r.email||'',
+      signatory:r.signatory||'',
+      sigRole:r.sig_role||'',
+      sigDate:r.sig_date||'',
+      status:r.status||'Pending',
+      submittedAt:r.submitted_at||''
+    };
+  }
+
   var promise;
   if (dataType === 'matches') {
     promise = dbGetMatches().then(function(rows) {
-      if (rows && rows.length) cacheSet('pitchcwc_matches', rows);
+      cacheSet('pitchcwc_matches', rows || []);
     });
   } else if (dataType === 'groups') {
     promise = dbGetGroups().then(function(obj) {
@@ -3524,44 +3589,22 @@ function syncAndRender(dataType, callback) {
     });
   } else if (dataType === 'stats') {
     promise = dbGetStats().then(function(rows) {
-      if (rows && rows.length) cacheSet('pitchcwc_stats', rows);
+      if (rows) cacheSet('pitchcwc_stats', rows);
     });
   } else if (dataType === 'regs') {
     promise = dbGetRegs().then(function(rows) {
       if (rows && rows.length) {
-        var mapped = rows.map(function(r) {
-          return {
-            id:r.id, team:r.team||'', company:r.company||'',
-            c1:r.country1||'', country1:r.country1||'',
-            companyLogo:r.company_logo||'',
-            staffPlayers:r.staff_players||[],
-            nonStaffPlayers:r.non_staff_players||[],
-            officials:r.officials||[],
-            contactPerson:r.contact_person||'',
-            contactNo:r.contact_no||'',
-            email:r.email||'',
-            signatory:r.signatory||'',
-            sigRole:r.sig_role||'',
-            sigDate:r.sig_date||'',
-            status:r.status||'Pending',
-            submittedAt:r.submitted_at||''
-          };
-        });
-        cacheSet('pitchcwc_regs', mapped);
+        cacheSet('pitchcwc_regs', rows.map(mapReg));
       }
     });
   } else {
     promise = Promise.resolve();
   }
 
-  promise.catch(function(e) {
-    console.warn('Sync failed for '+dataType+':', e && e.message);
-  }).then(function() {
-    if (typeof callback === 'function') callback();
-  }).catch(function() {
-    // Even if everything fails, still run callback with cached data
-    if (typeof callback === 'function') callback();
-  });
+  promise
+    .catch(function(e) { console.warn('syncAndRender failed ['+dataType+']:', e&&e.message); })
+    .then(function() { if (typeof callback === 'function') callback(); })
+    .catch(function() { if (typeof callback === 'function') callback(); });
 }
 // ================================================================
 // END SYNC HELPER
@@ -3590,18 +3633,11 @@ function showPage(id){
   if(id==='stats')     syncAndRender('stats',    renderStats);
   if(id==='teams')     syncAndRender('regs',     renderTeams);
   if(id==='admin'){
-    syncAndRender('regs', function(){
-      // Teams loaded - now populate match selector and dropdowns
-      syncAndRender('matches', function(){
-        if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
-        if(typeof renderScoresTable==='function') setTimeout(renderScoresTable,300);
-        if(typeof renderFixturesAdmin==='function') setTimeout(renderFixturesAdmin,400);
-      });
-    });
-    syncAndRender('groups', function(){
-      if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
-    });
-    syncAndRender('stats', function(){/* preload stats cache */});
+    // Preload all caches from DB
+    syncAndRender('regs', function(){});
+    syncAndRender('groups', function(){});
+    syncAndRender('stats', function(){});
+    syncAndRender('matches', function(){});
   }
 }
 
@@ -3805,8 +3841,7 @@ function getTeams() {
 
 // Ensure teams are loaded from DB before building dropdowns
 function ensureTeamsLoaded(callback) {
-  var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
-  if(cached.length > 0) { callback(); return; }
+  // Always fetch from DB to ensure cross-device accuracy
   dbGetRegs().then(function(rows){
     if(rows && rows.length){
       var mapped = rows.map(function(r){
@@ -3818,7 +3853,10 @@ function ensureTeamsLoaded(callback) {
       cacheSet('pitchcwc_regs', mapped);
     }
     callback();
-  }).catch(function(){ callback(); });
+  }).catch(function(e){
+    console.warn('ensureTeamsLoaded DB failed:', e&&e.message);
+    callback(); // still run with whatever is in cache
+  });
 }
 
 // ── STATS TAB ─────────────────────────────────────────────────
@@ -3842,11 +3880,17 @@ function initStatDropdowns() {
 function _buildStatTeamDropdown() {
   var teamSel = document.getElementById('stat-team-sel');
   if (!teamSel) return;
-  var teams = getTeams();
+  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  if (!regs.length) {
+    teamSel.innerHTML = '<option value="">— No approved teams yet —</option>';
+    return;
+  }
   teamSel.innerHTML = '<option value="">— Select team —</option>' +
-    teams.map(function(t){
-      return '<option value="'+t.name+'">'+t.flag+' '+t.name+'</option>';
-    }).join('');
+    regs.map(function(r){
+      var name = r.team || r.company || '';
+      var flag = (r.c1||r.country1||'').split(' ')[0] || '🏳️';
+      return '<option value="'+name+'">'+flag+' '+name+'</option>';
+    }).filter(function(o){ return o; }).join('');
 }
 
 function statTeamChanged() {
