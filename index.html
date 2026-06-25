@@ -1186,7 +1186,13 @@ async function dbUpdateMatch(m) {
   });
 }
 async function dbClearMatches() {
-  return await sbFetch('matches?id=gte.0', {method:'DELETE'});
+  try {
+    await sbFetch('matches?id=gte.0', {method:'DELETE'});
+    return true;
+  } catch(e) {
+    console.warn('dbClearMatches failed:', e && e.message);
+    return false;
+  }
 }
 
 // ── GROUPS ─────────────────────────────────────────────────────
@@ -3126,8 +3132,15 @@ function drawSave() {
     dbSaveGroup(gn, gs[gn]);
   });
   cacheSet('pitchcwc_groups', gs);
-  Object.keys(gs).forEach(function(gn){ dbSaveGroup(gn, gs[gn]); });
-  toast('✅ Groups saved! Go to Fixtures tab to generate the schedule.');
+  // Save each group to DB (deduplicated - drawSave above already saved each)
+  var savePromises = Object.keys(gs).map(function(gn){ return dbSaveGroup(gn, gs[gn]); });
+  Promise.all(savePromises).then(function(){
+    toast('✅ Groups saved to Supabase! Switch to Fixtures tab → Generate Schedule.');
+  }).catch(function(){
+    toast('⚠️ Groups saved locally but DB sync failed — check connection','red');
+  });
+  // Update fixture builder preview immediately
+  if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
 }
 
 function drawReset() {
@@ -3302,6 +3315,21 @@ function generateSchedule() {
   var slot  = slotGroup; // overridden below
   var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
   var groups  = cacheGet('pitchcwc_groups') || {};
+
+  // Also load fresh from DB in background for cross-device sync
+  if (!Object.keys(groups).length) {
+    // Try DB first, then proceed
+    toast('Loading groups from database...','blue');
+    dbGetGroups().then(function(dbGroups) {
+      if(dbGroups && Object.keys(dbGroups).length) {
+        cacheSet('pitchcwc_groups', dbGroups);
+        toast('Groups loaded! Click Generate again.');
+      } else {
+        toast('No groups found — assign teams in Step 3 first','red');
+      }
+    }).catch(function(){ toast('Could not load groups — check connection','red'); });
+    return;
+  }
 
   if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
     toast('Assign teams to groups in Step 3 first','red'); return;
@@ -3528,8 +3556,10 @@ function syncAndRender(dataType, callback) {
 
   promise.catch(function(e) {
     console.warn('Sync failed for '+dataType+':', e && e.message);
-  }).finally(function() {
-    // Always render, even if DB failed (uses cache)
+  }).then(function() {
+    if (typeof callback === 'function') callback();
+  }).catch(function() {
+    // Even if everything fails, still run callback with cached data
     if (typeof callback === 'function') callback();
   });
 }
@@ -3560,12 +3590,18 @@ function showPage(id){
   if(id==='stats')     syncAndRender('stats',    renderStats);
   if(id==='teams')     syncAndRender('regs',     renderTeams);
   if(id==='admin'){
-    syncAndRender('matches', function(){
-      if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
-      if(typeof renderScoresTable==='function') setTimeout(renderScoresTable, 300);
+    syncAndRender('regs', function(){
+      // Teams loaded - now populate match selector and dropdowns
+      syncAndRender('matches', function(){
+        if(typeof populateAdminMatchSel==='function') populateAdminMatchSel();
+        if(typeof renderScoresTable==='function') setTimeout(renderScoresTable,300);
+        if(typeof renderFixturesAdmin==='function') setTimeout(renderFixturesAdmin,400);
+      });
     });
-    syncAndRender('regs', function(){/* preload regs cache */});
-    syncAndRender('groups', function(){/* preload groups cache */});
+    syncAndRender('groups', function(){
+      if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
+    });
+    syncAndRender('stats', function(){/* preload stats cache */});
   }
 }
 
@@ -3760,7 +3796,29 @@ function getAllPlayers() {
 
 function getTeams() {
   var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
-  return regs.map(function(r){ return {name:r.team||r.company, flag:(r.c1||r.country1||'').split(' ')[0]||'🏳️'}; });
+  return regs.map(function(r){
+    var name = r.team||r.company||'';
+    var flag = (r.c1||r.country1||'').split(' ')[0]||'🏳️';
+    return {name:name, flag:flag};
+  }).filter(function(t){ return t.name; });
+}
+
+// Ensure teams are loaded from DB before building dropdowns
+function ensureTeamsLoaded(callback) {
+  var cached = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  if(cached.length > 0) { callback(); return; }
+  dbGetRegs().then(function(rows){
+    if(rows && rows.length){
+      var mapped = rows.map(function(r){
+        return {id:r.id, team:r.team||'', company:r.company||'',
+          c1:r.country1||'', country1:r.country1||'',
+          staffPlayers:r.staff_players||[], nonStaffPlayers:r.non_staff_players||[],
+          status:r.status||'Pending'};
+      });
+      cacheSet('pitchcwc_regs', mapped);
+    }
+    callback();
+  }).catch(function(){ callback(); });
 }
 
 // ── STATS TAB ─────────────────────────────────────────────────
@@ -4178,16 +4236,20 @@ function quickEditStat(playerName) {
 // Auto-render tables when tabs open (already handled in adminTab n===1 and n===2)
 // Also render on init
 function initScoresTab() {
-  populateAdminMatchSel ? populateAdminMatchSel() : null;
+  ensureTeamsLoaded(function(){
+    populateAdminMatchSel ? populateAdminMatchSel() : null;
   refreshScoresTable();
 
   if(typeof populateTourneySelectors==="function") populateTourneySelectors();
+  });
 }
 function initStatsTab() {
-  initStatDropdowns();
+  ensureTeamsLoaded(function(){
+    initStatDropdowns();
   refreshStatsTable();
 
   if(typeof populateTourneySelectors==="function") populateTourneySelectors();
+  });
 }
 // ================================================================
 // END SCORES & STATS EDIT TABLES
@@ -4624,7 +4686,7 @@ function statsTourneyChanged() {
 }
 
 // Publish fixtures to website (saves to Supabase so public pages update)
-function fxPublishFixtures() {
+async function fxPublishFixtures() {
   if(!adminLoggedIn){toast('Not authorised','red');return;}
   var matches = cacheGet('pitchcwc_matches')||[];
   var groups  = cacheGet('pitchcwc_groups')||{};
@@ -4632,31 +4694,29 @@ function fxPublishFixtures() {
     toast('Nothing to publish — generate fixtures first','red'); return;
   }
   var statusEl = document.getElementById('fx-publish-status');
-  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing...'; }
+  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing...'; statusEl.style.color='var(--gold)'; }
 
-  var tasks = [];
-  // Push matches
-  if(matches.length){
-    tasks.push(dbClearMatches().then(function(){ return dbSaveMatches(matches); }));
-  }
-  // Push groups
-  Object.keys(groups).forEach(function(gn){
-    tasks.push(dbSaveGroup(gn, groups[gn]));
-  });
-
-  Promise.all(tasks).then(function(){
+  try {
+    // Clear then save matches
+    if(matches.length){
+      await dbClearMatches();
+      await dbSaveMatches(matches);
+    }
+    // Save each group
+    var gnKeys = Object.keys(groups);
+    for(var gi=0; gi<gnKeys.length; gi++){
+      await dbSaveGroup(gnKeys[gi], groups[gnKeys[gi]]);
+    }
     if(statusEl){
-      statusEl.textContent = '✅ Published! '+matches.length+' matches and '+Object.keys(groups).length+' groups are now live on the website.';
+      statusEl.textContent = '✅ Published! '+matches.length+' matches and '+gnKeys.length+' groups live on website.';
       statusEl.style.color = '#2ECC71';
     }
     toast('✅ Fixtures published to website!');
-  }).catch(function(e){
-    if(statusEl){
-      statusEl.textContent = '❌ Publish failed: '+(e&&e.message||'network error');
-      statusEl.style.color = '#E74C3C';
-    }
-    toast('Publish failed — check connection','red');
-  });
+  } catch(e) {
+    var msg = (e&&e.message) ? e.message : 'Network error — check connection';
+    if(statusEl){ statusEl.textContent = '❌ '+msg; statusEl.style.color='#E74C3C'; }
+    toast('Publish failed: '+msg,'red');
+  }
 }
 
 // Hook into initScoresTab and initStatsTab to populate selectors
