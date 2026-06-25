@@ -2845,12 +2845,15 @@ function drawInit() {
   _drawTPG = tpg;
 
   // Load approved teams from cache then DB
-  var regs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
-  if (!regs.length) {
+  // Always refresh from DB to ensure we have all approved teams
+  var regs = [];
+  var cachedRegs = (cacheGet('pitchcwc_regs')||[]).filter(function(r){ return r.status==='Approved'; });
+  if (!cachedRegs.length) {
     // Try DB
     dbGetRegs().then(function(rows){
       var approved = rows.filter(function(r){ return r.status==='Approved'; });
       if (!approved.length) { toast('No approved teams found — approve registrations first','red'); return; }
+      cacheSet('pitchcwc_regs', rows);
       var mapped = approved.map(function(r){
         return {
           name:    r.team||r.company||('Team '+r.id),
@@ -2863,7 +2866,25 @@ function drawInit() {
     });
     return;
   }
-  var teams = regs.map(function(r){
+  // Also fetch fresh from DB to ensure nothing is missing
+  dbGetRegs().then(function(rows){
+    var freshApproved = rows.filter(function(r){ return r.status==='Approved'; });
+    if (freshApproved.length >= cachedRegs.length) {
+      cacheSet('pitchcwc_regs', rows);
+      var freshTeams = freshApproved.map(function(r){
+        return {
+          name:    r.team||r.company||('Team '+r.id),
+          flag:    (r.country1||r.c1||r.flag||'').split(' ')[0]||'🏳️',
+          company: r.company||r.team||'',
+          id:      r.id
+        };
+      }).filter(function(t){ return t.name && t.name.trim(); });
+      _drawStart(ng, tpg, freshTeams);
+      return;
+    }
+  }).catch(function(){});
+  // Start with cached while DB loads
+  var teams = cachedRegs.map(function(r){
     return {
       name:    r.team||r.company||('Team '+r.id),
       flag:    (r.c1||r.country1||r.flag||'').split(' ')[0]||'🏳️',
@@ -2901,7 +2922,16 @@ function _drawStart(ng, tpg, teams) {
 }
 
 function drawPull() {
-  if (_drawBowl.length===0) { toast('Bowl is empty!','red'); return; }
+  if (_drawBowl.length===0) {
+    // Check if there are unfilled slots - reload teams from DB
+    var missing2 = _drawNames.filter(function(gn){ return (_drawGroups[gn]||[]).length < _drawTPG; });
+    if (missing2.length > 0) {
+      toast('Bowl is empty but '+missing2.join(', ')+' need more teams. Check approved registrations.','red');
+    } else {
+      toast('Draw is complete!','red');
+    }
+    return;
+  }
   if (_drawDone)             { toast('Draw is complete!','red'); return; }
 
   // Find next group needing teams (round-robin across groups)
@@ -2943,15 +2973,23 @@ function drawPull() {
     if (saveBtn) saveBtn.style.display='block';
     toast('🎉 Draw complete! All teams assigned.');
   } else if (_drawBowl.length===0) {
-    // Bowl empty but groups not full — some teams may not have loaded
-    _drawDone = true;
-    var pullBtn2 = document.getElementById('draw-pull-btn');
-    if (pullBtn2) { pullBtn2.disabled=true; pullBtn2.textContent='⚠️ Bowl Empty'; }
-    var saveBtn2 = document.getElementById('draw-save-btn');
-    if (saveBtn2) saveBtn2.style.display='block';
+    // Bowl empty after this pull
     var missing = _drawNames.map(function(gn){ return _drawTPG - (_drawGroups[gn]||[]).length; }).reduce(function(a,b){return a+b;},0);
-    if (missing > 0) toast('⚠️ Bowl empty but '+missing+' slot(s) unfilled. Check approved registrations.','red');
-    else toast('🎉 Draw complete!');
+    if (missing > 0) {
+      // Groups still have empty slots - warn but DON'T disable
+      toast('⚠️ '+missing+' slot(s) still unfilled. Not all teams may be approved.','red');
+      // Show save anyway
+      var saveBtn2 = document.getElementById('draw-save-btn');
+      if (saveBtn2) saveBtn2.style.display='block';
+    } else {
+      // Truly complete
+      _drawDone = true;
+      var pullBtn2 = document.getElementById('draw-pull-btn');
+      if (pullBtn2) { pullBtn2.disabled=true; pullBtn2.textContent='✅ Draw Complete'; }
+      var saveBtn2b = document.getElementById('draw-save-btn');
+      if (saveBtn2b) saveBtn2b.style.display='block';
+      toast('🎉 Draw complete!');
+    }
   }
   _drawRefresh();
 }
