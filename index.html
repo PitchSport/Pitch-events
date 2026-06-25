@@ -1052,49 +1052,56 @@ var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 
 function sbFetch(table, opts) {
   opts = opts || {};
-  return new Promise(function(resolve, reject) {
-    var url = SB_URL + '/rest/v1/' + table;
-    var params = [];
-    if (opts.select) params.push('select=' + encodeURIComponent(opts.select));
-    if (opts.eq)     params.push(opts.eq);
-    if (opts.order)  params.push('order=' + opts.order);
-    if (opts.limit)  params.push('limit=' + opts.limit);
-    if (params.length) url += '?' + params.join('&');
+  var url = SB_URL + '/rest/v1/' + table;
+  var params = [];
+  if (opts.select) params.push('select=' + encodeURIComponent(opts.select));
+  if (opts.eq)     params.push(opts.eq);
+  if (opts.order)  params.push('order=' + opts.order);
+  if (opts.limit)  params.push('limit=' + opts.limit);
+  if (params.length) url += '?' + params.join('&');
 
-    var method = (opts.method || 'GET').toUpperCase();
-    var xhr = new XMLHttpRequest();
-    xhr.open(method, url, true);
-    xhr.setRequestHeader('apikey', SB_KEY);
-    xhr.setRequestHeader('Authorization', 'Bearer ' + SB_KEY);
-    if (method !== 'GET' && method !== 'DELETE') {
-      xhr.setRequestHeader('Content-Type', 'application/json');
-    }
-    if (opts.prefer) {
-      xhr.setRequestHeader('Prefer', opts.prefer);
-    } else if (method === 'POST') {
-      xhr.setRequestHeader('Prefer', 'return=representation,resolution=merge-duplicates');
-    } else if (method === 'PATCH') {
-      xhr.setRequestHeader('Prefer', 'return=representation');
-    }
+  var method = (opts.method || 'GET').toUpperCase();
+  var headers = {
+    'apikey':        SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'Accept':        'application/json',
+    'Content-Type':  'application/json'
+  };
+  if (opts.prefer) {
+    headers['Prefer'] = opts.prefer;
+  } else if (method === 'POST') {
+    headers['Prefer'] = 'resolution=merge-duplicates,return=representation';
+  } else if (method === 'PATCH') {
+    headers['Prefer'] = 'return=representation';
+  }
 
-    xhr.onload = function() {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        var text = xhr.responseText;
-        if (!text || text === '') { resolve(method === 'GET' ? [] : {}); return; }
-        try { resolve(JSON.parse(text)); } catch(e) { resolve([]); }
-      } else {
-        console.error('Supabase error:', xhr.status, xhr.responseText.slice(0,200));
-        resolve(null);
+  var fetchOpts = { method: method, headers: headers };
+  if (opts.body && method !== 'GET' && method !== 'DELETE') {
+    fetchOpts.body = JSON.stringify(opts.body);
+  }
+
+  return fetch(url, fetchOpts).then(function(res) {
+    if (res.status === 204 || res.status === 200 && res.headers.get('content-length') === '0') {
+      return method === 'GET' ? [] : {};
+    }
+    return res.text().then(function(text) {
+      if (!text || text.trim() === '') return method === 'GET' ? [] : {};
+      try {
+        var data = JSON.parse(text);
+        if (!res.ok) {
+          var msg = (data && (data.message || data.error || data.hint)) || ('HTTP ' + res.status);
+          console.error('Supabase error [' + method + ' ' + table + ']:', msg);
+          // Return empty rather than throwing — keeps UI functional
+          return method === 'GET' ? [] : {};
+        }
+        return data;
+      } catch(e) {
+        return method === 'GET' ? [] : {};
       }
-    };
-    xhr.onerror = function() {
-      reject(new Error('Network error — could not reach Supabase'));
-    };
-    xhr.ontimeout = function() {
-      reject(new Error('Request timed out'));
-    };
-    xhr.timeout = 10000;
-    xhr.send(opts.body ? JSON.stringify(opts.body) : null);
+    });
+  }).catch(function(e) {
+    console.error('sbFetch network error [' + table + ']:', e && e.message);
+    throw e; // re-throw so callers can catch
   });
 }
 
@@ -4559,25 +4566,46 @@ function koRounds(n) {
 function fxSaveTournament() {
   var name = (document.getElementById('fx-tourney-name').value||'').trim();
   if(!name){ toast('Enter a tournament name first','red'); return; }
+  
+  // Capture per-day settings
+  var numDays = parseInt((document.getElementById('fx-num-days')||{value:'3'}).value||3);
+  var ng = parseInt((document.getElementById('fx-groups')||{value:'2'}).value||2);
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+  var daySettings = [];
+  for(var d=1; d<=numDays; d++) {
+    var dayRound = (document.getElementById('fx-dayround-'+d)||{}).value || '';
+    var dayDate  = (document.getElementById('fx-date-'+d)||{}).value || '';
+    var grpTimes = {};
+    letters.forEach(function(l) {
+      grpTimes[l] = {
+        start: (document.getElementById('fx-start-'+d+'-'+l)||{}).value || '08:00',
+        end:   (document.getElementById('fx-end-'+d+'-'+l)||{}).value   || '18:00'
+      };
+    });
+    daySettings.push({ day:d, round:dayRound, date:dayDate, grpTimes:grpTimes });
+  }
+
   var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
   var idx = saved.findIndex(function(t){ return t.name===name; });
   var entry = {
-    name: name,
-    savedAt: new Date().toLocaleString(),
-    format:  (document.getElementById('fx-format')||{}).value||'group-knockout',
-    groups:  (document.getElementById('fx-groups')||{}).value||'2',
-    tpg:     (document.getElementById('fx-tpg')||{}).value||'5',
-    advance: (document.getElementById('fx-advance')||{}).value||'2',
-    duration:(document.getElementById('fx-duration')||{}).value||'14',
-    brk:     (document.getElementById('fx-break')||{}).value||'5',
-    courts:  (document.getElementById('fx-courts')||{}).value||'2',
-    numDays: (document.getElementById('fx-num-days')||{}).value||'3',
-    groupData: cacheGet('pitchcwc_groups')||{},
-    matches:   cacheGet('pitchcwc_matches')||[],
+    name:     name,
+    savedAt:  new Date().toLocaleString(),
+    format:   (document.getElementById('fx-format')||{}).value||'group-knockout',
+    groups:   (document.getElementById('fx-groups')||{}).value||'2',
+    tpg:      (document.getElementById('fx-tpg')||{}).value||'5',
+    advance:  (document.getElementById('fx-advance')||{}).value||'2',
+    durGroup: (document.getElementById('fx-duration-group')||{}).value||'14',
+    durKO:    (document.getElementById('fx-duration-ko')||{}).value||'20',
+    brk:      (document.getElementById('fx-break')||{}).value||'5',
+    courts:   (document.getElementById('fx-courts')||{}).value||'2',
+    numDays:  numDays,
+    daySettings: daySettings,
+    groupData:   cacheGet('pitchcwc_groups')||{},
+    matches:     cacheGet('pitchcwc_matches')||[],
   };
   if(idx!==-1) saved[idx]=entry; else saved.unshift(entry);
   localStorage.setItem('pitchcwc_tournaments', JSON.stringify(saved));
-  toast('Tournament "'+name+'" saved ✅');
+  toast('Tournament "'+name+'" saved ✅ ('+entry.matches.length+' matches, '+(Object.keys(entry.groupData).length)+' groups)');
 }
 
 function fxShowSaved() {
@@ -4616,32 +4644,54 @@ function fxLoadTournament(idx) {
   var saved = JSON.parse(localStorage.getItem('pitchcwc_tournaments')||'[]');
   var t = saved[idx];
   if(!t) return;
-  // Load all settings
+  
   var set = function(id,v){ var el=document.getElementById(id); if(el) el.value=v; };
   document.getElementById('fx-tourney-name').value = t.name;
-  set('fx-groups', t.groups);
-  set('fx-tpg', t.tpg);
-  set('fx-advance', t.advance||'2');
-  set('fx-duration', t.duration||'14');
-  set('fx-break', t.brk||'5');
-  set('fx-courts', t.courts||'2');
-  set('fx-num-days', t.numDays||'3');
-  // Restore groups and matches
-  if(t.groupData && Object.keys(t.groupData).length){
-    cacheSet('pitchcwc_groups', t.groupData);
-  }
-  if(t.matches && t.matches.length){
-    cacheSet('pitchcwc_matches', t.matches);
-  }
-  // Restore format card
-  fxSelectFormat(t.format||'group-knockout');
+  set('fx-groups',   t.groups  || '2');
+  set('fx-tpg',      t.tpg     || '5');
+  set('fx-advance',  t.advance || '2');
+  set('fx-duration-group', t.durGroup || t.duration || '14');
+  set('fx-duration-ko',    t.durKO    || '20');
+  set('fx-break',    t.brk    || '5');
+  set('fx-courts',   t.courts || '2');
+  set('fx-num-days', t.numDays|| '3');
+
+  // Restore format and rebuild day rows FIRST
+  fxSelectFormat(t.format || 'group-knockout');
   fxBuildDayRows();
-  if(typeof renderFixturesAdmin==='function') renderFixturesAdmin();
-  if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
-  // Hide panel
-  var panel=document.getElementById('fx-saved-panel');
-  if(panel) panel.style.display='none';
-  toast('Loaded: '+t.name);
+
+  // THEN restore per-day settings (after rows are built)
+  setTimeout(function() {
+    if(t.daySettings && t.daySettings.length) {
+      t.daySettings.forEach(function(ds) {
+        var d = ds.day;
+        set('fx-dayround-'+d, ds.round || '');
+        set('fx-date-'+d,     ds.date  || '');
+        if(ds.grpTimes) {
+          Object.keys(ds.grpTimes).forEach(function(l) {
+            set('fx-start-'+d+'-'+l, ds.grpTimes[l].start || '08:00');
+            set('fx-end-'+d+'-'+l,   ds.grpTimes[l].end   || '18:00');
+          });
+        }
+        // Trigger round-changed to rebuild slot type
+        if(typeof fxDayRoundChanged==='function') fxDayRoundChanged(d);
+      });
+    }
+
+    // Restore groups and matches
+    if(t.groupData && Object.keys(t.groupData).length) {
+      cacheSet('pitchcwc_groups', t.groupData);
+      if(typeof renderSavedGroupsPreview==='function') renderSavedGroupsPreview();
+    }
+    if(t.matches && t.matches.length) {
+      cacheSet('pitchcwc_matches', t.matches);
+      if(typeof renderFixturesAdmin==='function') renderFixturesAdmin();
+    }
+  }, 100);
+
+  var panel = document.getElementById('fx-saved-panel');
+  if(panel) panel.style.display = 'none';
+  toast('Loaded: '+t.name+' ('+((t.matches||[]).length)+' matches)');
 }
 
 function fxDeleteTournament(idx) {
