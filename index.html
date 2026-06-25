@@ -947,6 +947,7 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
         <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:16px;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-save" onclick="fxSaveTournament()" style="width:auto;padding:11px 24px;font-size:15px">💾 Save Tournament</button>
           <button class="btn-save" onclick="fxPublishFixtures()" style="width:auto;padding:11px 24px;font-size:15px;background:linear-gradient(135deg,#2ECC71,#27AE60)">🌐 Publish</button>
+          <button onclick="testSupabase()" style="width:auto;padding:11px 24px;font-size:15px;background:rgba(52,152,219,.2);border:1px solid #3498DB;color:#3498DB;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-weight:900;cursor:pointer">🔬 Test DB</button>
           <button class="btn-danger" onclick="clearFixtures()" style="width:auto">🗑️ Clear</button>
         </div>
         <div id="fx-publish-status" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);border-radius:7px;font-size:13px;color:#2ECC71;font-weight:600"></div>
@@ -1050,6 +1051,53 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
 var SB_URL = "https://dkioezovgulwaeweytkg.supabase.co";
 var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRraW9lem92Z3Vsd2Fld2V5dGtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0NTM4ODIsImV4cCI6MjA5NTAyOTg4Mn0.n_a4HgYOw-tmMLZ3Dn3HSjc29VTARXWTatIqRV9OFbQ";
 
+// DEBUG: Test Supabase connection
+async function testSupabase() {
+  var statusEl = document.getElementById('fx-publish-status');
+  if(statusEl) { statusEl.style.display='block'; statusEl.style.color='var(--gold)'; statusEl.textContent='Testing Supabase connection...'; }
+  
+  try {
+    // Test 1: Read
+    var regs = await sbFetch('registrations', {select:'id,team', limit:'1'});
+    var readMsg = 'READ: ' + (regs && regs.length ? '✅ Got '+regs.length+' row(s)' : '❌ Empty or failed');
+    
+    // Test 2: Write a test match
+    var testMatch = {
+      id: 9999999999999,
+      grp: 'TEST', round: 'TEST',
+      home: 'Test Home', h_flag: '🔵', h_company: '',
+      away: 'Test Away', a_flag: '🔴', a_company: '',
+      score_h: 0, score_a: 0, status: 'upcoming', minute: '',
+      scorers: [], day: 1, day_label: 'Day 1',
+      time: '08:00', end_time: '08:20', pitch: 1, duration: 14, is_ko: false
+    };
+    var writeResult = await sbFetch('matches', {
+      method: 'POST',
+      prefer: 'resolution=merge-duplicates,return=minimal',
+      body: [testMatch]
+    });
+    var writeMsg = 'WRITE: ' + (writeResult !== null ? '✅ Success' : '❌ Failed');
+    
+    // Test 3: Verify it was written
+    var verify = await sbFetch('matches', {select:'id,home', eq:'id=eq.9999999999999', limit:'1'});
+    var verifyMsg = 'VERIFY: ' + (verify && verify.length ? '✅ Found in DB' : '❌ Not found');
+    
+    // Test 4: Delete test row
+    await sbFetch('matches', {method:'DELETE', eq:'id=eq.9999999999999'});
+    
+    var msg = readMsg + ' | ' + writeMsg + ' | ' + verifyMsg;
+    if(statusEl) { statusEl.textContent = msg; statusEl.style.color = writeResult!==null?'#2ECC71':'#E74C3C'; }
+    toast(msg, writeResult!==null?'':'red');
+    console.log('Supabase test:', msg);
+    
+  } catch(e) {
+    var errMsg = '❌ Error: ' + (e&&e.message||'unknown');
+    if(statusEl) { statusEl.textContent = errMsg; statusEl.style.color = '#E74C3C'; }
+    toast(errMsg, 'red');
+    console.error('testSupabase error:', e);
+  }
+}
+
 function sbFetch(table, opts) {
   opts = opts || {};
   var url = SB_URL + '/rest/v1/' + table;
@@ -1101,7 +1149,7 @@ function sbFetch(table, opts) {
     });
   }).catch(function(e) {
     console.error('sbFetch network error [' + table + ']:', e && e.message);
-    throw e; // re-throw so callers can catch
+    return null; // return null so callers can detect failure
   });
 }
 
