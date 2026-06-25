@@ -2046,62 +2046,78 @@ function dayLabel(dayNum) {
 
 function generateKnockoutBracket() {
   if (!adminLoggedIn) { toast('Not authorised','red'); return; }
-  var fmt   = document.getElementById('fx-format').value;
-  var g     = parseInt(document.getElementById('fx-groups').value||2);
-  var koT   = fmt==='knockout-only' ? parseInt(document.getElementById('fx-ko-teams').value||32) : g*2;
-  var dur   = parseInt(document.getElementById('fx-duration').value||14);
-  var brk   = parseInt(document.getElementById('fx-break').value||5);
-  var cts   = parseInt(document.getElementById('fx-courts').value||2);
-  var nDays = parseInt(document.getElementById('fx-num-days').value||3);
-  var slot  = dur+brk;
-  var existing = (cacheGet('pitchcwc_matches')||[]);
-  var grpMs    = existing.filter(function(m){return !m.isKO;});
 
-  // Find KO days
-  var koDays = [];
-  for (var d=1;d<=nDays;d++) {
-    var sel = document.getElementById('fx-dayround-'+d);
-    var dt  = sel ? sel.value : '';
-    if (dt==='ko'||dt==='mixed'||dt==='ro32'||dt==='ro16'||dt==='qf'||dt==='sf'||dt==='f') koDays.push(d);
+  var fmt  = document.getElementById('fx-format').value;
+  var ng   = parseInt(document.getElementById('fx-groups').value || 2);
+  var adv  = parseInt((document.getElementById('fx-advance')||{value:'2'}).value || 2);
+  var koT  = fmt==='knockout-only'
+    ? parseInt((document.getElementById('fx-ko-teams')||{value:'8'}).value || 8)
+    : ng * adv;
+  var dur  = parseInt(document.getElementById('fx-duration').value || 14);
+  var brk  = parseInt(document.getElementById('fx-break').value || 5);
+  var cts  = parseInt(document.getElementById('fx-courts').value || 2);
+  var nDays = parseInt(document.getElementById('fx-num-days').value || 3);
+
+  // Find the KO day (last day or the day marked as 'ko')
+  var koDayNum = nDays;
+  for (var d=1; d<=nDays; d++) {
+    var rd = (document.getElementById('fx-dayround-'+d)||{}).value || '';
+    if (['ko','qf','sf','final','ro16','ro32'].indexOf(rd) !== -1) { koDayNum=d; break; }
   }
-  if (!koDays.length) koDays = [nDays];
+  var koDate  = (document.getElementById('fx-date-'+koDayNum)||{}).value || '2026-07-19';
+  var dayLabel = koDate ? new Date(koDate+'T00:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}) : 'Day '+koDayNum;
 
-  var koMatches = [];
-  var koDayIdx = 0;
-  var slotPerDay = {};
-  koDays.forEach(function(d){ slotPerDay[d] = 0; });
+  // Build stages based on koT (e.g. 8 teams → QF→SF→Final)
+  var stages = [];
+  var stageLabels = {8:'Quarter Final',4:'Semi Final',2:'Final',16:'Round of 16',32:'Round of 32',3:'3rd Place'};
+  var stageVals   = {8:'qf',4:'sf',2:'final',16:'ro16',32:'ro32',3:'3rd'};
+  var n = koT;
+  while (n >= 2) {
+    var label = stageLabels[n] || ('Round of '+n);
+    var val   = stageVals[n]   || ('r'+n);
+    stages.push({ n:n, label:label, val:val });
+    if (n === 4) stages.push({ n:3, label:'3rd Place Play-off', val:'3rd' }); // add 3rd place
+    n = Math.floor(n/2);
+  }
 
-  var rem = koT;
-  while (rem >= 2) {
-    var rn = KO_ROUNDS[rem]||'Round of '+rem;
-    var nm = rem/2;
-    for (var mi=0;mi<nm;mi++) {
-      var kd = koDays[Math.min(koDayIdx,koDays.length-1)];
-      var startEl = document.getElementById('fx-start-'+kd);
-      var start = startEl ? startEl.value : '08:00';
-      var sPts  = start.split(':').map(Number);
-      var si    = slotPerDay[kd]||0;
-      var startM = sPts[0]*60+sPts[1]+Math.floor(si/cts)*slot;
-      koMatches.push({
-        id:Date.now()+si+Math.floor(Math.random()*10000),
-        group:rn, round:rn, isKO:true, matchNum:mi+1,
-        home:'TBD '+(mi*2+1), hFlag:'🔵', hCompany:'',
-        away:'TBD '+(mi*2+2), aFlag:'🔴', aCompany:'',
-        scoreH:0, scoreA:0, status:'upcoming', minute:'', scorers:[],
-        day:kd, dayLabel:dayLabel(kd),
-        time:fmtMins(startM), endTime:fmtMins(startM+dur),
-        pitch:(si%cts)+1, duration:dur
+  // Build matches for each stage
+  var allMatches = cacheGet('pitchcwc_matches') || [];
+  var newMatches = [];
+  var slotMin = 0;
+
+  stages.forEach(function(stage) {
+    var matchCount = Math.floor(stage.n / 2);
+    var stageStart = (document.getElementById('fx-kostart-'+koDayNum+'-'+stage.val)||{}).value || '08:00';
+
+    for (var m=0; m<matchCount; m++) {
+      var totalMin = slotMin + m * Math.ceil(matchCount / cts) * (dur + brk);
+      var hh = parseInt(stageStart.split(':')[0]) + Math.floor(totalMin/60);
+      var mm = (parseInt(stageStart.split(':')[1]||0) + (totalMin%60)) % 60;
+      var timeStr = String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+
+      newMatches.push({
+        id:      Date.now() + Math.random(),
+        group:   stage.label,
+        stage:   stage.val,
+        day:     koDayNum,
+        dayLabel:dayLabel,
+        date:    koDate,
+        time:    timeStr,
+        pitch:   (m % cts) + 1,
+        home:    stage.label + ' Home ' + (m+1),
+        away:    stage.label + ' Away ' + (m+1),
+        scoreH:  0, scoreA: 0,
+        status:  'upcoming', scorers: []
       });
-      slotPerDay[kd] = si+1;
     }
-    rem = rem/2;
-    koDayIdx = Math.min(koDayIdx+1, koDays.length-1);
-  }
+    slotMin += matchCount * (dur + brk);
+  });
 
-  var combined=[...grpMs,...koMatches]; cacheSet('pitchcwc_matches',combined); dbClearMatches().then(function(){ dbSaveMatches(combined); });
-  renderFixturesAdmin();
-  populateAdminMatchSel();
-  toast('KO bracket added: '+koMatches.length+' matches');
+  var combined = allMatches.concat(newMatches);
+  cacheSet('pitchcwc_matches', combined);
+  dbClearMatches().then(function(){ dbSaveMatches(combined); });
+  renderFixturesAdmin ? renderFixturesAdmin() : null;
+  toast('✅ Added '+newMatches.length+' knockout matches ('+stages.map(function(s){return s.label;}).join(' → ')+')');
 }
 
 
@@ -2896,6 +2912,7 @@ function drawInit() {
 }
 
 function _drawStart(ng, tpg, teams) {
+  _drawTPG = tpg; // ensure global is always in sync
   // Fisher-Yates shuffle
   var bowl = teams.slice();
   for (var i=bowl.length-1; i>0; i--) {
@@ -3105,59 +3122,107 @@ function fxBuildDayRows() {
   var n   = parseInt(document.getElementById('fx-num-days').value || 3);
   var con = document.getElementById('fx-day-rows');
   if (!con) return;
-  var fmt = (document.getElementById('fx-format')||{}).value || 'group-knockout';
-  var ng  = parseInt((document.getElementById('fx-groups')||{}).value || 2);
+  var fmt  = (document.getElementById('fx-format')||{}).value || 'group-knockout';
+  var ng   = parseInt((document.getElementById('fx-groups')||{}).value || 2);
+  var adv  = parseInt((document.getElementById('fx-advance')||{value:'2'}).value || 2);
   var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
 
-  // Default dates: Jul 5, 12, 19 weekly
+  // Default tournament dates
   var baseDates = ['2026-07-05','2026-07-12','2026-07-19','2026-07-26','2026-08-02'];
 
-  // Default round labels per day index
-  var defaultRounds = [];
-  if (fmt === 'group-knockout') {
-    if (n === 3) defaultRounds = ['rr1','rr2','ko'];
-    else if (n === 2) defaultRounds = ['group','ko'];
-    else for (var d=0;d<n;d++) defaultRounds.push(d===n-1?'ko':'rr'+(d+1));
-  } else {
-    for (var d=0;d<n;d++) defaultRounds.push('rr'+(d+1));
+  // Build KO stages based on how many teams advance
+  function koStages(advPerGroup) {
+    var total = ng * advPerGroup;
+    var stages = [];
+    var labels = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Finals',4:'Semi Finals',2:'Final'};
+    while (total >= 2) {
+      stages.push({ val: total===2?'final':total===4?'sf':total===8?'qf':total===16?'ro16':total===32?'ro32':'ko', label: labels[total]||('Round of '+total) });
+      total = Math.floor(total/2);
+    }
+    return stages;
   }
 
+  // Default round assignments per day
+  var defaultRounds = [];
+  if (fmt === 'group-knockout') {
+    if (n === 1) defaultRounds = ['group'];
+    else if (n === 2) defaultRounds = ['group', 'ko'];
+    else {
+      // Days 1 to n-1 = round robin matchdays, last day = knockout
+      for (var d=0; d<n; d++) defaultRounds.push(d===n-1 ? 'ko' : 'rr'+(d+1));
+    }
+  } else if (fmt === 'knockout-only') {
+    var kos = koStages(adv);
+    for (var d=0; d<n; d++) defaultRounds.push(kos[d] ? kos[d].val : 'ko');
+  } else {
+    // League
+    for (var d=0; d<n; d++) defaultRounds.push('rr'+(d+1));
+  }
+
+  // Round options for dropdown
   var roundOptions =
+    '<optgroup label="Group Stage">' +
     '<option value="rr1">Round Robin — Matchday 1</option>' +
     '<option value="rr2">Round Robin — Matchday 2</option>' +
     '<option value="rr3">Round Robin — Matchday 3</option>' +
-    '<option value="rr4">Round Robin — Matchday 4</option>' +
     '<option value="group">All Group Stage Matches</option>' +
-    '<option value="ko">Knockout Rounds (QF + SF + Final)</option>' +
+    '</optgroup>' +
+    '<optgroup label="Knockout">' +
+    '<option value="ro32">Round of 32</option>' +
     '<option value="ro16">Round of 16</option>' +
     '<option value="qf">Quarter Finals</option>' +
-    '<option value="sf">Semi Finals + Final</option>';
+    '<option value="sf">Semi Finals</option>' +
+    '<option value="final">Final</option>' +
+    '<option value="ko">Full Knockout Day (QF+SF+Final)</option>' +
+    '</optgroup>';
 
   var html = '';
   for (var i=1; i<=n; i++) {
     var defDate  = baseDates[i-1] || '';
-    var defRound = defaultRounds[i-1] || 'rr'+i;
-    html += '<div style="background:var(--panel3);border-radius:8px;padding:14px;margin-bottom:8px">';
-    // Day header
+    var defRound = defaultRounds[i-1] || 'rr1';
+    var isKO     = ['ko','qf','sf','final','ro16','ro32'].indexOf(defRound) !== -1;
+
+    html += '<div style="background:var(--panel3);border-radius:8px;padding:14px;margin-bottom:8px" id="fx-day-block-'+i+'">';
+
+    // Day header row
     html += '<div style="display:grid;grid-template-columns:60px 1fr 1fr 2fr;gap:10px;align-items:end;margin-bottom:12px">';
     html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:18px;font-weight:900;color:var(--gold)">Day '+i+'</div>';
     html += '<div><label class="form-label">Date</label><input type="date" class="form-input" id="fx-date-'+i+'" value="'+defDate+'"></div>';
     html += '<div><label class="form-label">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'" value="08:00"></div>';
-    html += '<div><label class="form-label">Stage / Round</label><select class="form-select" id="fx-dayround-'+i+'">'+roundOptions+'</select></div>';
+    html += '<div><label class="form-label">Stage / Round</label><select class="form-select" id="fx-dayround-'+i+'" onchange="fxDayRoundChanged('+i+')">'+roundOptions+'</select></div>';
     html += '</div>';
-    // Per-group time rows
-    html += '<div style="display:flex;flex-direction:column;gap:6px">';
-    letters.forEach(function(l) {
-      var defStart = l==='A'?'08:00':l==='B'?'14:00':l==='C'?'17:00':'19:00';
-      var defEnd   = l==='A'?'13:00':l==='B'?'17:00':l==='C'?'20:00':'22:00';
-      html += '<div style="display:grid;grid-template-columns:70px 1fr 1fr auto;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
-      html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold)">Group '+l+'</div>';
-      html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'-'+l+'" value="'+defStart+'" style="padding:7px 10px;font-size:13px"></div>';
-      html += '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-end-'+i+'-'+l+'" value="'+defEnd+'" style="padding:7px 10px;font-size:13px"></div>';
-      html += '<div style="font-size:11px;color:var(--muted)" id="fx-slots-'+i+'-'+l+'"></div>';
+
+    // Time slots section — shown based on round type
+    if (isKO) {
+      // KO day: show individual stage time slots
+      var kos2 = koStages(adv);
+      html += '<div id="fx-day-slots-'+i+'" style="display:flex;flex-direction:column;gap:6px">';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set kick-off times per knockout stage:</div>';
+      kos2.forEach(function(stage) {
+        html += '<div style="display:grid;grid-template-columns:160px 1fr 1fr;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+        html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:#2ECC71">'+stage.label+'</div>';
+        html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-kostart-'+i+'-'+stage.val+'" value="08:00" style="padding:7px 10px;font-size:13px"></div>';
+        html += '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-koend-'+i+'-'+stage.val+'" value="22:00" style="padding:7px 10px;font-size:13px"></div>';
+        html += '</div>';
+      });
       html += '</div>';
-    });
-    html += '</div></div>';
+    } else {
+      // Group/RR day: show per-group time slots
+      html += '<div id="fx-day-slots-'+i+'" style="display:flex;flex-direction:column;gap:6px">';
+      html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set kick-off windows per group:</div>';
+      letters.forEach(function(l) {
+        var defStart = l==='A'?'08:00':l==='B'?'14:00':l==='C'?'17:00':'19:00';
+        var defEnd   = l==='A'?'13:00':l==='B'?'17:00':l==='C'?'20:00':'22:00';
+        html += '<div style="display:grid;grid-template-columns:70px 1fr 1fr auto;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+        html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold)">Group '+l+'</div>';
+        html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-'+i+'-'+l+'" value="'+defStart+'" style="padding:7px 10px;font-size:13px"></div>';
+        html += '<div><label class="form-label" style="font-size:9px">End Time</label><input type="time" class="form-input" id="fx-end-'+i+'-'+l+'" value="'+defEnd+'" style="padding:7px 10px;font-size:13px"></div>';
+        html += '<div style="font-size:11px;color:var(--muted)" id="fx-slots-'+i+'-'+l+'"></div>';
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    html += '</div>';
   }
   con.innerHTML = html;
 
@@ -3167,6 +3232,57 @@ function fxBuildDayRows() {
     if (sel && defaultRounds[di-1]) sel.value = defaultRounds[di-1];
   }
   fxCalc();
+}
+
+// Called when a day's round dropdown changes — rebuild that day's time slots
+function fxDayRoundChanged(dayNum) {
+  var sel = document.getElementById('fx-dayround-'+dayNum);
+  if (!sel) return;
+  var val  = sel.value;
+  var isKO = ['ko','qf','sf','final','ro16','ro32'].indexOf(val) !== -1;
+  var ng   = parseInt((document.getElementById('fx-groups')||{}).value || 2);
+  var adv  = parseInt((document.getElementById('fx-advance')||{value:'2'}).value || 2);
+  var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
+
+  function koStagesL(advPerGroup) {
+    var total = ng * advPerGroup;
+    var stages = [];
+    var labels = {64:'Round of 64',32:'Round of 32',16:'Round of 16',8:'Quarter Finals',4:'Semi Finals',2:'Final'};
+    while (total >= 2) {
+      stages.push({ val: total===2?'final':total===4?'sf':total===8?'qf':total===16?'ro16':total===32?'ro32':'ko', label: labels[total]||('Round of '+total) });
+      total = Math.floor(total/2);
+    }
+    return stages;
+  }
+
+  var slotsEl = document.getElementById('fx-day-slots-'+dayNum);
+  if (!slotsEl) return;
+
+  var html = '';
+  if (isKO) {
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set kick-off times per knockout stage:</div>';
+    var kos = koStagesL(adv);
+    kos.forEach(function(stage) {
+      html += '<div style="display:grid;grid-template-columns:160px 1fr 1fr;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+      html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:#2ECC71">'+stage.label+'</div>';
+      html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-kostart-'+dayNum+'-'+stage.val+'" value="08:00" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div><label class="form-label" style="font-size:9px">End</label><input type="time" class="form-input" id="fx-koend-'+dayNum+'-'+stage.val+'" value="22:00" style="padding:7px 10px;font-size:13px"></div>';
+      html += '</div>';
+    });
+  } else {
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:4px">Set kick-off windows per group:</div>';
+    letters.forEach(function(l) {
+      var defStart = l==='A'?'08:00':l==='B'?'14:00':l==='C'?'17:00':'19:00';
+      var defEnd   = l==='A'?'13:00':l==='B'?'17:00':l==='C'?'20:00':'22:00';
+      html += '<div style="display:grid;grid-template-columns:70px 1fr 1fr auto;gap:8px;align-items:end;background:rgba(0,0,0,.2);border-radius:6px;padding:8px 10px">';
+      html += '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:13px;font-weight:800;color:var(--gold)">Group '+l+'</div>';
+      html += '<div><label class="form-label" style="font-size:9px">Kick-off</label><input type="time" class="form-input" id="fx-start-'+dayNum+'-'+l+'" value="'+defStart+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div><label class="form-label" style="font-size:9px">End</label><input type="time" class="form-input" id="fx-end-'+dayNum+'-'+l+'" value="'+defEnd+'" style="padding:7px 10px;font-size:13px"></div>';
+      html += '<div style="font-size:11px;color:var(--muted)" id="fx-slots-'+dayNum+'-'+l+'"></div>';
+      html += '</div>';
+    });
+  }
+  slotsEl.innerHTML = html;
 }
 
 function generateSchedule() {
