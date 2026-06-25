@@ -946,8 +946,7 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
         <div id="fixtures-admin-list" style="max-height:500px;overflow-y:auto;border-radius:7px;margin-bottom:16px"></div>
         <div style="border-top:1px solid rgba(255,255,255,.07);padding-top:16px;display:flex;gap:10px;flex-wrap:wrap">
           <button class="btn-save" onclick="fxSaveTournament()" style="width:auto;padding:11px 24px;font-size:15px">💾 Save Tournament</button>
-          <button class="btn-save" onclick="fxPublishFixtures()" style="width:auto;padding:11px 24px;font-size:15px;background:linear-gradient(135deg,#2ECC71,#27AE60)">🌐 Publish</button>
-          <button onclick="testSupabase()" style="width:auto;padding:11px 24px;font-size:15px;background:rgba(52,152,219,.2);border:1px solid #3498DB;color:#3498DB;border-radius:7px;font-family:'Barlow Condensed',sans-serif;font-weight:900;cursor:pointer">🔬 Test DB</button>
+          <button class="btn-save" onclick="fxPublishFixtures()" style="width:auto;padding:11px 24px;font-size:15px;background:linear-gradient(135deg,#2ECC71,#27AE60)">🌐 Publish to All Devices</button>
           <button class="btn-danger" onclick="clearFixtures()" style="width:auto">🗑️ Clear</button>
         </div>
         <div id="fx-publish-status" style="display:none;margin-top:10px;padding:10px 14px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.2);border-radius:7px;font-size:13px;color:#2ECC71;font-weight:600"></div>
@@ -1261,12 +1260,13 @@ async function dbUpdateMatch(m) {
 }
 async function dbClearMatches() {
   try {
-    // Delete all matches - using neq to match all rows
-    await sbFetch('matches', {method:'DELETE', eq:'id=gt.0'});
+    // Supabase REST: DELETE with filter in URL params
+    var result = await sbFetch('matches?id=gt.0', {method:'DELETE'});
+    console.log('dbClearMatches result:', result);
     return true;
   } catch(e) {
     console.warn('dbClearMatches failed:', e && e.message);
-    return false;
+    return false; // don't block saves if clear fails
   }
 }
 
@@ -1280,7 +1280,7 @@ async function dbGetGroups() {
 async function dbSaveGroup(groupName, teams) {
   return await sbFetch('groups_data', {
     method:'POST',
-    prefer:'resolution=merge-duplicates,return=representation',
+    prefer:'resolution=merge-duplicates,return=minimal',
     body:{group_name:groupName, teams:teams}
   });
 }
@@ -3435,33 +3435,33 @@ async function generateSchedule() {
   var slotKO    = durKO + brk;
   var slot  = slotGroup; // overridden below
   var letters = 'ABCDEFGHIJKL'.split('').slice(0, ng);
-  // Load groups - try cache first, then Supabase
-  var groups = cacheGet('pitchcwc_groups') || {};
-  
-  // If groups empty, load from Supabase
-  if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
-    toast('Loading groups from Supabase...', 'blue');
-    try {
-      var dbGroups = await dbGetGroups();
-      if (dbGroups && Object.keys(dbGroups).length) {
-        cacheSet('pitchcwc_groups', dbGroups);
-        groups = dbGroups;
-        toast('Groups loaded from Supabase ✅');
-      } else {
-        toast('No groups found — save your group assignments first', 'red');
-        return;
-      }
-    } catch(e) {
-      toast('Could not load groups — check connection', 'red');
-      return;
+  // ALWAYS load fresh groups from Supabase before generating
+  toast('Loading groups from Supabase...', 'blue');
+  var groups = {};
+  try {
+    var dbGroups = await dbGetGroups();
+    if (dbGroups && Object.keys(dbGroups).length) {
+      groups = dbGroups;
+      cacheSet('pitchcwc_groups', groups);
+    } else {
+      // Fall back to cache
+      groups = cacheGet('pitchcwc_groups') || {};
     }
+  } catch(e) {
+    groups = cacheGet('pitchcwc_groups') || {};
+  }
+
+  if (fmt !== 'knockout-only' && !Object.keys(groups).length) {
+    toast('No groups found — save your group assignments in Step 3 first', 'red');
+    return;
   }
 
   // Read day assignments
   var dayAssign = {};
   for (var d=1; d<=nDays; d++) {
     var sel = document.getElementById('fx-dayround-'+d);
-    dayAssign[d] = sel ? sel.value : 'rr'+d;
+    dayAssign[d] = sel ? sel.value : (d===nDays ? 'ko' : 'rr'+d);
+    console.log('Day', d, 'round:', dayAssign[d], 'sel exists:', !!sel);
   }
 
   // ── Berger round-robin ──────────────────────────────────────
@@ -3483,10 +3483,12 @@ async function generateSchedule() {
 
   // Build rounds per group
   var groupRounds = {}, groupData = {};
+  console.log('generateSchedule: groups loaded =', JSON.stringify(Object.keys(groups)));
   letters.forEach(function(l) {
     var gn = 'Group '+l;
     var gd = (groups[gn] || []);
     if (!Array.isArray(gd)) gd = [];
+    console.log('Group', l, ': gd =', JSON.stringify(gd.slice(0,2)));
     var names = [];
     gd.forEach(function(t, ti) {
       var n = '';
@@ -3496,6 +3498,7 @@ async function generateSchedule() {
       else if (t && t.company) n = t.company;
       if (n && n.trim()) names.push(n.trim());
     });
+    console.log('Group', l, ': names =', JSON.stringify(names));
     if (!names.length) { for (var i=0;i<tpg;i++) names.push('Team '+(i+1)+' ('+gn+')'); };
     // Double round robin = run berger twice
     var rr1 = bergerRounds(names);
@@ -3560,19 +3563,24 @@ async function generateSchedule() {
       for (var ri=0; ri<maxRounds; ri++) {
         letters.forEach(function(l) {
           var gn = 'Group '+l;
-          var rounds = getRoundsForDay(dtype, gn);
-          var pair = rounds[ri];
-          if (!pair) return;
+          var allRounds = getRoundsForDay(dtype, gn);
+          // allRounds[ri] is ONE round = array of pairs [{home,away},...]
+          var oneRound = allRounds[ri];
+          if (!oneRound) return;
+          var pairsInRound = Array.isArray(oneRound) ? oneRound : [oneRound];
           var gd = groupData[gn] || [];
-          var hd = gd.find(function(t){ 
-            var n = typeof t==='string'?t:(t.name||t.team||t.company||'');
-            return n === pair.home;
-          }) || {};
-          var ad = gd.find(function(t){
-            var n = typeof t==='string'?t:(t.name||t.team||t.company||'');
-            return n === pair.away;
-          }) || {};
-          allMatches.push(makeMatch(pair.home, pair.away, hd, ad, gn, dayNum, l));
+          pairsInRound.forEach(function(pair) {
+            if (!pair || !pair.home || !pair.away) return;
+            var hd = gd.find(function(t){
+              var n = typeof t==='string'?t:(t.name||t.team||t.company||'');
+              return n === pair.home;
+            }) || {};
+            var ad = gd.find(function(t){
+              var n = typeof t==='string'?t:(t.name||t.team||t.company||'');
+              return n === pair.away;
+            }) || {};
+            allMatches.push(makeMatch(pair.home, pair.away, hd, ad, gn, dayNum, l));
+          });
         });
       }
     }
@@ -4870,38 +4878,41 @@ async function fxPublishFixtures() {
   if(!adminLoggedIn){toast('Not authorised','red');return;}
   var matches = cacheGet('pitchcwc_matches')||[];
   var groups  = cacheGet('pitchcwc_groups')||{};
-  if(!matches.length && !Object.keys(groups).length){
+  var gnKeys  = Object.keys(groups);
+  
+  console.log('PUBLISH: matches='+matches.length+' groups='+gnKeys.length);
+  if(matches[0]) console.log('PUBLISH: first match home='+matches[0].home+' away='+matches[0].away);
+  
+  if(!matches.length && !gnKeys.length){
     toast('Nothing to publish — generate fixtures first','red'); return;
   }
+
   var statusEl = document.getElementById('fx-publish-status');
-  if(statusEl){ statusEl.style.display='block'; statusEl.textContent='Publishing to Supabase...'; statusEl.style.color='var(--gold)'; }
+  function setStatus(msg, color) {
+    if(statusEl){ statusEl.style.display='block'; statusEl.textContent=msg; statusEl.style.color=color||'var(--gold)'; }
+    console.log('PUBLISH STATUS:', msg);
+  }
 
+  setStatus('Step 1/3: Saving groups...', 'var(--gold)');
   try {
-    var steps = [];
-
-    // Save groups
-    var gnKeys = Object.keys(groups);
     for(var gi=0; gi<gnKeys.length; gi++){
-      await dbSaveGroup(gnKeys[gi], groups[gnKeys[gi]]);
-      steps.push('Group '+gnKeys[gi]);
+      var gn = gnKeys[gi];
+      var result = await dbSaveGroup(gn, groups[gn]);
+      console.log('Saved group '+gn+':', result!==null?'ok':'failed');
     }
-
-    // Clear and save matches
-    if(matches.length){
-      await dbClearMatches();
-      await dbSaveMatches(matches);
-      steps.push(matches.length+' matches');
-    }
-
-    var msg = '✅ Published: '+steps.join(', ')+' — now live on all devices!';
-    if(statusEl){ statusEl.textContent=msg; statusEl.style.color='#2ECC71'; }
-    toast(msg);
-
+    setStatus('Step 2/3: Clearing old matches...', 'var(--gold)');
+    await dbClearMatches();
+    
+    setStatus('Step 3/3: Saving '+matches.length+' matches...', 'var(--gold)');
+    await dbSaveMatches(matches);
+    
+    setStatus('✅ Done! '+matches.length+' matches + '+gnKeys.length+' groups live on ALL devices!', '#2ECC71');
+    toast('✅ Published to Supabase — all devices will now sync!');
   } catch(e) {
-    var errMsg = '❌ Publish failed: '+(e&&e.message||'check console for details');
-    console.error('fxPublishFixtures error:', e);
-    if(statusEl){ statusEl.textContent=errMsg; statusEl.style.color='#E74C3C'; }
-    toast(errMsg,'red');
+    var msg = '❌ Failed: '+(e&&e.message||'unknown error');
+    setStatus(msg, '#E74C3C');
+    toast(msg, 'red');
+    console.error('PUBLISH ERROR:', e);
   }
 }
 
