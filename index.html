@@ -2922,75 +2922,93 @@ function _drawStart(ng, tpg, teams) {
 }
 
 function drawPull() {
-  if (_drawBowl.length===0) {
-    // Check if there are unfilled slots - reload teams from DB
-    var missing2 = _drawNames.filter(function(gn){ return (_drawGroups[gn]||[]).length < _drawTPG; });
-    if (missing2.length > 0) {
-      toast('Bowl is empty but '+missing2.join(', ')+' need more teams. Check approved registrations.','red');
-    } else {
-      toast('Draw is complete!','red');
-    }
+  // Guard: nothing to pull
+  if (!_drawBowl || _drawBowl.length === 0) {
+    toast('No teams left in the bowl!', 'red');
     return;
   }
-  if (_drawDone)             { toast('Draw is complete!','red'); return; }
-
-  // Find next group needing teams (round-robin across groups)
-  var target = null;
-  for (var attempt=0; attempt<_drawNames.length*2; attempt++) {
-    var gn = _drawNames[_drawCursor % _drawNames.length];
-    if (_drawGroups[gn].length < _drawTPG) { target=gn; _drawCursor++; break; }
-    _drawCursor++;
+  if (_drawDone) {
+    toast('Draw is already complete!', 'red');
+    return;
   }
-  if (!target) { _drawDone=true; _drawRefresh(); return; }
+  if (!_drawNames || !_drawNames.length) {
+    toast('Draw not initialised — click Load Teams first.', 'red');
+    return;
+  }
 
-  // Pull random team
-  var idx = Math.floor(Math.random()*_drawBowl.length);
+  // Find the group that needs the next team
+  // Strategy: pick the group with the FEWEST teams that still needs more
+  // This is more reliable than round-robin cursor
+  var target = null;
+  var minTeams = _drawTPG;
+  for (var gi = 0; gi < _drawNames.length; gi++) {
+    var gn = _drawNames[gi];
+    var cnt = (_drawGroups[gn] || []).length;
+    if (cnt < _drawTPG && cnt <= minTeams) {
+      // Prefer the group earlier in the list when tied
+      if (target === null || cnt < minTeams) {
+        target = gn;
+        minTeams = cnt;
+      }
+    }
+  }
+
+  if (!target) {
+    // All groups full
+    _drawDone = true;
+    var pb = document.getElementById('draw-pull-btn');
+    if (pb) { pb.disabled = true; pb.textContent = '✅ Draw Complete'; }
+    var sb = document.getElementById('draw-save-btn');
+    if (sb) sb.style.display = 'block';
+    _drawRefresh();
+    toast('🎉 All groups are full!');
+    return;
+  }
+
+  // Pull a random team from the bowl
+  var idx = Math.floor(Math.random() * _drawBowl.length);
   var team = _drawBowl.splice(idx, 1)[0];
+  if (!_drawGroups[target]) _drawGroups[target] = [];
   _drawGroups[target].push(team);
 
-  // Animate reveal
+  // Animate the reveal
   var rev = document.getElementById('draw-reveal');
   if (rev) {
-    rev.style.opacity='0'; rev.style.transform='scale(0.7)';
-    setTimeout(function(){
+    rev.style.opacity = '0';
+    rev.style.transform = 'scale(0.7)';
+    setTimeout(function() {
       rev.innerHTML =
-        '<div style="font-size:46px;margin-bottom:6px">'+team.flag+'</div>'+
-        '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:24px;font-weight:900;color:var(--white);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">'+team.name+'</div>'+
-        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+team.company+'</div>'+
-        '<div style="background:var(--gg);color:#000;font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:900;padding:5px 20px;border-radius:20px;display:inline-block;text-transform:uppercase;letter-spacing:.08em">→ '+target+'</div>';
-      rev.style.transition='all 0.25s ease';
-      rev.style.opacity='1'; rev.style.transform='scale(1)';
+        '<div style="font-size:46px;margin-bottom:6px">' + team.flag + '</div>' +
+        '<div style="font-family:\'Barlow Condensed\',sans-serif;font-size:24px;font-weight:900;color:var(--white);text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">' + team.name + '</div>' +
+        '<div style="font-size:11px;color:var(--muted);margin-bottom:10px">' + (team.company || '') + '</div>' +
+        '<div style="background:var(--gg);color:#000;font-family:\'Barlow Condensed\',sans-serif;font-size:16px;font-weight:900;padding:5px 20px;border-radius:20px;display:inline-block;text-transform:uppercase;letter-spacing:.08em">→ ' + target + '</div>';
+      rev.style.transition = 'all 0.25s ease';
+      rev.style.opacity = '1';
+      rev.style.transform = 'scale(1)';
     }, 120);
   }
 
-  // Check if draw is complete
-  var allFull = _drawNames.every(function(gn){ return _drawGroups[gn].length >= _drawTPG; });
+  // Check if all groups are now full
+  var allFull = _drawNames.every(function(gn) {
+    return (_drawGroups[gn] || []).length >= _drawTPG;
+  });
+
   if (allFull) {
     _drawDone = true;
-    var pullBtn = document.getElementById('draw-pull-btn');
-    if (pullBtn) { pullBtn.disabled=true; pullBtn.textContent='✅ Draw Complete'; }
-    var saveBtn = document.getElementById('draw-save-btn');
-    if (saveBtn) saveBtn.style.display='block';
+    var pb2 = document.getElementById('draw-pull-btn');
+    if (pb2) { pb2.disabled = true; pb2.textContent = '✅ Draw Complete'; }
+    var sb2 = document.getElementById('draw-save-btn');
+    if (sb2) sb2.style.display = 'block';
     toast('🎉 Draw complete! All teams assigned.');
-  } else if (_drawBowl.length===0) {
-    // Bowl empty after this pull
-    var missing = _drawNames.map(function(gn){ return _drawTPG - (_drawGroups[gn]||[]).length; }).reduce(function(a,b){return a+b;},0);
-    if (missing > 0) {
-      // Groups still have empty slots - warn but DON'T disable
-      toast('⚠️ '+missing+' slot(s) still unfilled. Not all teams may be approved.','red');
-      // Show save anyway
-      var saveBtn2 = document.getElementById('draw-save-btn');
-      if (saveBtn2) saveBtn2.style.display='block';
-    } else {
-      // Truly complete
-      _drawDone = true;
-      var pullBtn2 = document.getElementById('draw-pull-btn');
-      if (pullBtn2) { pullBtn2.disabled=true; pullBtn2.textContent='✅ Draw Complete'; }
-      var saveBtn2b = document.getElementById('draw-save-btn');
-      if (saveBtn2b) saveBtn2b.style.display='block';
-      toast('🎉 Draw complete!');
-    }
+  } else if (_drawBowl.length === 0) {
+    // Bowl ran out before groups were full
+    var filled = _drawNames.reduce(function(s, gn) { return s + (_drawGroups[gn] || []).length; }, 0);
+    var needed = _drawNames.length * _drawTPG;
+    toast('⚠️ Bowl empty with ' + (needed - filled) + ' slot(s) remaining. Not all teams may be approved.', 'red');
+    var sb3 = document.getElementById('draw-save-btn');
+    if (sb3) sb3.style.display = 'block';
   }
+
   _drawRefresh();
 }
 
