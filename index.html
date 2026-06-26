@@ -517,7 +517,25 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
 </div>
 
 <!-- ============ STATS PAGE ============ -->
-<div id="page-stats" class="page">
+<div
+
+        <!-- ── BEST GOALKEEPER LEADERBOARD ── -->
+        <div style="margin-top:40px;padding-top:28px;border-top:1px solid rgba(255,255,255,.08)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🧤 Best Goalkeeper</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:18px;letter-spacing:.03em">Score = (CS×5) + (Win×3) + (Draw×1) + (⌊Saves÷3⌋×2) + (PenSaves×5) − Goals Conceded</div>
+          <div id="gk-leaderboard">
+            <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading goalkeeper rankings...</div>
+          </div>
+        </div>
+
+        <!-- ── PLAYER OF THE TOURNAMENT ── -->
+        <div style="margin-top:40px;padding-top:28px;border-top:1px solid rgba(255,255,255,.08)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">⭐ Player of the Tournament</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:18px;letter-spacing:.03em">Score = (Avg Rating × 70%) + (Goals × 15%) + (Assists × 10%) + (Discipline × 5%)</div>
+          <div id="pot-leaderboard">
+            <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">Loading player rankings...</div>
+          </div>
+        </div> id="page-stats" class="page">
   <div class="section">
     <div class="section-label">Player Awards</div>
     <h2 class="section-title">Statistics & Leaderboards</h2>
@@ -809,20 +827,67 @@ footer{background:var(--dark);border-top:1px solid rgba(245,197,24,.1);padding:4
     <div id="atab-content2" style="display:none;margin-top:24px">
       <div class="admin-panel">
         <div class="admin-title">📊 Update Player Stats</div>
-        <div class="form-group" style="margin-bottom:14px"><label class="form-label">Tournament</label><select class="form-select" id="stats-tourney-sel" onchange="statsTourneyChanged()"><option value="current">Current / Active</option></select></div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label class="form-label">Tournament</label>
+          <select class="form-select" id="stats-tourney-sel" onchange="statsTourneyChanged()"><option value="current">Current / Active</option></select>
+        </div>
         <div style="background:rgba(201,162,39,.06);border:1px solid rgba(201,162,39,.15);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--muted)">Select team → player auto-fills position &amp; jersey.</div>
         <div class="form-group" style="margin-bottom:12px"><label class="form-label">1. Select Team</label><select class="form-select" id="stat-team-sel" onchange="statTeamChanged()"><option value="">— Select team —</option></select></div>
         <div class="form-group" style="margin-bottom:12px"><label class="form-label">2. Select Player</label><select class="form-select" id="stat-player-sel" onchange="statPlayerChanged()" disabled><option value="">— Select team first —</option></select></div>
-        <div id="stat-player-info" style="display:none;background:var(--panel2);border-radius:8px;padding:12px 14px;margin-bottom:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px"><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Jersey</div><div id="stat-jersey-display" style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--gold)">—</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Position</div><div id="stat-pos-display" style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--white)">—</div></div><div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Country</div><div id="stat-flag-display" style="font-size:20px">—</div></div></div></div>
+        <div id="stat-player-info" style="display:none;background:var(--panel2);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Jersey</div><div id="stat-jersey-display" style="font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:900;color:var(--gold)">—</div></div>
+            <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Position</div><div id="stat-pos-display" style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--white)">—</div></div>
+            <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Country</div><div id="stat-flag-display" style="font-size:20px">—</div></div>
+          </div>
+        </div>
         <input type="hidden" id="stat-player" value=""><input type="hidden" id="stat-team" value=""><input type="hidden" id="stat-flag" value="">
-        <div class="form-row"><div class="form-group"><label class="form-label">Goals</label><input type="number" class="form-input" id="stat-goals" value="0" min="0"></div><div class="form-group"><label class="form-label">Assists</label><input type="number" class="form-input" id="stat-assists" value="0" min="0"></div></div>
-        <div class="form-row"><div class="form-group"><label class="form-label">Clean Sheets</label><input type="number" class="form-input" id="stat-cs" value="0" min="0"></div><div class="form-group"><label class="form-label">Save %</label><input type="number" class="form-input" id="stat-save" value="0" min="0" max="100"></div></div>
-        <button class="btn-save" onclick="saveStat()" id="stat-save-btn" disabled style="opacity:.5">Add / Update Stats</button>
-        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--white);text-transform:uppercase">Current Stats</div><button class="btn btn-outline" onclick="refreshStatsTable()" style="padding:6px 14px;font-size:12px">↻ Refresh</button></div><div id="stats-table" style="overflow-x:auto"></div></div>
-      </div>
-    </div>
 
-    <div id="atab-content3" style="display:none;margin-top:24px">
+        <!-- General Stats -->
+        <div style="background:var(--panel2);border-radius:8px;padding:14px;margin-bottom:12px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:900;color:var(--gold);text-transform:uppercase;margin-bottom:10px">⚽ Match Stats</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
+            <div class="form-group"><label class="form-label">Matches Played</label><input type="number" class="form-input" id="stat-matches" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">Match Rating (1–10)</label><input type="number" class="form-input" id="stat-rating" value="0" min="0" max="10" step="0.1"></div>
+            <div class="form-group"><label class="form-label">Goals</label><input type="number" class="form-input" id="stat-goals" value="0" min="0"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div class="form-group"><label class="form-label">Assists</label><input type="number" class="form-input" id="stat-assists" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">🟨 Yellow Cards</label><input type="number" class="form-input" id="stat-yellow" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">🟥 Red Cards</label><input type="number" class="form-input" id="stat-red" value="0" min="0"></div>
+          </div>
+        </div>
+
+        <!-- GK Stats -->
+        <div style="background:var(--panel2);border-radius:8px;padding:14px;margin-bottom:12px">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:900;color:var(--gold);text-transform:uppercase;margin-bottom:10px">🧤 Goalkeeper Stats (GK only)</div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
+            <div class="form-group"><label class="form-label">Minutes Played</label><input type="number" class="form-input" id="stat-gk-mins" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">Goals Conceded</label><input type="number" class="form-input" id="stat-gk-conceded" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">Saves</label><input type="number" class="form-input" id="stat-gk-saves" value="0" min="0"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+            <div class="form-group"><label class="form-label">Penalty Saves</label><input type="number" class="form-input" id="stat-gk-pensaves" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">Clean Sheets</label><input type="number" class="form-input" id="stat-gk-cs" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">GK Matches</label><input type="number" class="form-input" id="stat-gk-matches" value="0" min="0"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px">
+            <div class="form-group"><label class="form-label">Wins</label><input type="number" class="form-input" id="stat-gk-wins" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">Draws</label><input type="number" class="form-input" id="stat-gk-draws" value="0" min="0"></div>
+            <div class="form-group"><label class="form-label">GK Score (auto)</label><input type="number" class="form-input" id="stat-gk-score" value="0" disabled style="opacity:.6"></div>
+          </div>
+        </div>
+
+        <button class="btn-save" onclick="saveStat()" id="stat-save-btn" disabled style="opacity:.5">Add / Update Stats</button>
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:900;color:var(--white);text-transform:uppercase">Current Stats</div>
+            <button class="btn btn-outline" onclick="refreshStatsTable()" style="padding:6px 14px;font-size:12px">↻ Refresh</button>
+          </div>
+          <div id="stats-table" style="overflow-x:auto"></div>
+        </div>
+      </div>
+    </div><div id="atab-content3" style="display:none;margin-top:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
         <div>
           <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:800;color:var(--white);text-transform:uppercase">Team Registrations</div>
@@ -1292,15 +1357,31 @@ async function dbClearGroups() {
 async function dbGetStats() {
   return await sbFetch('player_stats', {select:'*', order:'goals.desc'}) || [];
 }
-async function dbUpsertStat(stat) {
-  return await sbFetch('player_stats', {
-    method:'POST',
-    prefer:'resolution=merge-duplicates,return=representation',
-    body:{
-      name:stat.name, team:stat.team, flag:stat.flag||'🏳️',
-      goals:stat.goals||0, assists:stat.assists||0,
-      cs:stat.cs||0, save_pct:stat.save||0,
-      jersey:stat.jersey||'', position:stat.position||'', ic:stat.ic||''
+async function dbUpsertStat(s) {
+  return sbFetch('player_stats', {
+    method: 'POST',
+    prefer: 'resolution=merge-duplicates,return=minimal',
+    body: {
+      name:             s.name,
+      team:             s.team,
+      flag:             s.flag   || '🏳️',
+      goals:            s.goals  || 0,
+      assists:          s.assists|| 0,
+      clean_sheets:     s.cs     || s.gkCleanSheets || 0,
+      save_pct:         s.save   || 0,
+      matches:          s.matches|| s.matchesPlayed || 0,
+      total_rating:     s.totalRating || 0,
+      yellow_cards:     s.yellowCards || 0,
+      red_cards:        s.redCards    || 0,
+      gk_minutes:       s.gkMinutes       || 0,
+      gk_goals_conceded:s.gkGoalsConceded || 0,
+      gk_saves:         s.gkSaves         || 0,
+      gk_pen_saves:     s.gkPenaltySaves  || 0,
+      gk_clean_sheets:  s.gkCleanSheets   || 0,
+      gk_wins:          s.gkWins          || 0,
+      gk_draws:         s.gkDraws         || 0,
+      gk_matches:       s.gkMatches       || 0,
+      gk_score:         s.gkScore         || 0
     }
   });
 }
@@ -2599,32 +2680,61 @@ function updateStatsFromScorers(match){
   cacheSet('pitchcwc_stats', statsData);
 }
 
-function saveStat(){
+async function saveStat(){
   if(!adminLoggedIn){toast('Not authorised','red');return;}
-  const name=document.getElementById('stat-player').value.trim();
-  const team=document.getElementById('stat-team').value.trim();
-  const goals=parseInt(document.getElementById('stat-goals').value)||0;
-  const assists=parseInt(document.getElementById('stat-assists').value)||0;
-  const cs=parseInt(document.getElementById('stat-cs').value)||0;
-  const save=parseInt(document.getElementById('stat-save').value)||0;
-  const flag=document.getElementById('stat-flag').value||'🏴';
-  if(!name||!team){toast('Enter player name and team','red');return;}
-  const statsData=(cacheGet('pitchcwc_stats')||[]);
-  const existing=statsData.find(s=>s.name===name);
-  if(existing){existing.goals=goals;existing.assists=assists;existing.flag=flag;}
-  else{statsData.push({name,team,flag,goals,assists,cs:0,save:0,rating:goals+assists});}
-  cacheSet('pitchcwc_stats', statsData);
-  if(cs>0||save>0){
-    const keepersData=(cacheGet('pitchcwc_keepers')||[]);
-    const gk=keepersData.find(k=>k.name===name);
-    if(gk){gk.cs=cs;gk.save=save;}else{keepersData.push({name,team,flag,cs,save});}
-    cacheSet('pitchcwc_keepers', keepersData);
+  var player = document.getElementById('stat-player').value;
+  var team   = document.getElementById('stat-team').value;
+  var flag   = document.getElementById('stat-flag').value;
+  if(!player||!team){toast('Select a player first','red');return;}
+
+  var gkWins  = parseInt((document.getElementById('stat-gk-wins')||{value:'0'}).value)||0;
+  var gkDraws = parseInt((document.getElementById('stat-gk-draws')||{value:'0'}).value)||0;
+  var gkCS    = parseInt((document.getElementById('stat-gk-cs')||{value:'0'}).value)||0;
+  var gkSaves = parseInt((document.getElementById('stat-gk-saves')||{value:'0'}).value)||0;
+  var gkPen   = parseInt((document.getElementById('stat-gk-pensaves')||{value:'0'}).value)||0;
+  var gkGA    = parseInt((document.getElementById('stat-gk-conceded')||{value:'0'}).value)||0;
+  var gkScore = (gkCS*5)+(gkWins*3)+(gkDraws*1)+(Math.floor(gkSaves/3)*2)+(gkPen*5)-gkGA;
+  var gkScoreEl = document.getElementById('stat-gk-score');
+  if(gkScoreEl) gkScoreEl.value = gkScore;
+
+  var mp     = parseInt((document.getElementById('stat-matches')||{value:'0'}).value)||0;
+  var rating = parseFloat((document.getElementById('stat-rating')||{value:'0'}).value)||0;
+  var goals  = parseInt(document.getElementById('stat-goals').value)||0;
+  var assts  = parseInt(document.getElementById('stat-assists').value)||0;
+  var yellows= parseInt((document.getElementById('stat-yellow')||{value:'0'}).value)||0;
+  var reds   = parseInt((document.getElementById('stat-red')||{value:'0'}).value)||0;
+
+  var entry = {
+    name:name||player, team:team, flag:flag,
+    matches:mp, totalRating:rating*mp,
+    goals:goals, assists:assts,
+    yellowCards:yellows, redCards:reds,
+    cs:gkCS,
+    gkMinutes:parseInt((document.getElementById('stat-gk-mins')||{value:'0'}).value)||0,
+    gkGoalsConceded:gkGA, gkSaves:gkSaves,
+    gkPenaltySaves:gkPen, gkCleanSheets:gkCS,
+    gkWins:gkWins, gkDraws:gkDraws,
+    gkMatches:parseInt((document.getElementById('stat-gk-matches')||{value:'0'}).value)||0,
+    gkScore:gkScore
+  };
+  // fix: use player not name
+  entry.name = player;
+
+  var stats = cacheGet('pitchcwc_stats')||[];
+  var ei = stats.findIndex(function(s){ return s.name===player && s.team===team; });
+  if(ei!==-1) stats[ei]=entry; else stats.push(entry);
+  cacheSet('pitchcwc_stats', stats);
+
+  try {
+    await dbUpsertStat(entry);
+    toast('✅ Stats saved — '+player+' | GK Score: '+gkScore);
+  } catch(e) {
+    toast('Stats saved locally only','red');
+    console.error('saveStat error:', e);
   }
-  // Save to Supabase
-  dbUpsertStat({name:name, team:team, flag:flag, goals:goals, assists:assists, cs:cs, save:save});
-  toast('Stats updated for '+name);
-  // Refresh stats table
-  if(typeof renderStatsTable==='function') renderStatsTable();
+  refreshStatsTable();
+  if(typeof renderGKLeaderboard==='function') renderGKLeaderboard();
+  if(typeof renderPOTLeaderboard==='function') renderPOTLeaderboard();
 }
 
 
@@ -3731,7 +3841,11 @@ function showPage(id){
   }
   if(id==='fixtures')  syncAndRender('matches',  renderFixtures);
   if(id==='standings') syncAndRender('groups',   renderStandings);
-  if(id==='stats')     syncAndRender('stats',    renderStats);
+  if(id==='stats')     syncAndRender('stats', function(){
+    renderStats();
+    if(typeof renderGKLeaderboard==='function') renderGKLeaderboard();
+    if(typeof renderPOTLeaderboard==='function') renderPOTLeaderboard();
+  });
   if(id==='teams')     syncAndRender('regs',     renderTeams);
   if(id==='admin'){
     // Preload all caches from DB
@@ -4949,6 +5063,240 @@ function populateScoreSel() {
 // Logo restore
 
 
+
+
+// ════════════════════════════════════════════════════════════════
+// NEW FEATURES ADDED - ALL EXISTING FUNCTIONS UNCHANGED ABOVE
+// ════════════════════════════════════════════════════════════════
+
+// ── 1. AUTO-UPDATE PLAYER GOALS FROM MATCH SCORERS ───────────
+// Called automatically when a score is saved - adds goals to stats
+function autoUpdateStatsFromMatch(match) {
+  if (!match || !match.scorers || !match.scorers.length) return;
+  var stats = cacheGet('pitchcwc_stats') || [];
+  var changed = false;
+
+  match.scorers.forEach(function(scorer) {
+    if (!scorer || !scorer.name || !scorer.team) return;
+    var isOG = (scorer.type === 'Own Goal');
+    // Own goal counts for the OTHER team, but we record it under scorer's name
+    var entry = stats.find(function(s) {
+      return s.name === scorer.name && s.team === scorer.team;
+    });
+    if (!entry) {
+      entry = {
+        name: scorer.name, team: scorer.team,
+        flag: scorer.flag || '🏳️',
+        goals: 0, assists: 0, cs: 0, save: 0,
+        matches: 0, totalRating: 0,
+        yellowCards: 0, redCards: 0,
+        gkMinutes: 0, gkGoalsConceded: 0, gkSaves: 0,
+        gkPenaltySaves: 0, gkCleanSheets: 0,
+        gkWins: 0, gkDraws: 0, gkMatches: 0, gkScore: 0
+      };
+      stats.push(entry);
+      changed = true;
+    }
+    if (!isOG) {
+      entry.goals = (entry.goals || 0) + 1;
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    cacheSet('pitchcwc_stats', stats);
+    // Sync to Supabase in background
+    stats.forEach(function(s) {
+      if (s.goals > 0 || s.assists > 0) dbUpsertStat(s);
+    });
+  }
+}
+
+// ── 2. GK SCORE CALCULATOR ────────────────────────────────────
+function calcGKScore(s) {
+  var cs  = s.gkCleanSheets   || 0;
+  var w   = s.gkWins           || 0;
+  var d   = s.gkDraws          || 0;
+  var sv  = s.gkSaves          || 0;
+  var ps  = s.gkPenaltySaves   || 0;
+  var ga  = s.gkGoalsConceded  || 0;
+  return (cs * 5) + (w * 3) + (d * 1) + (Math.floor(sv / 3) * 2) + (ps * 5) - ga;
+}
+
+// ── 3. GK LEADERBOARD RENDERER ───────────────────────────────
+function renderGKLeaderboard() {
+  var el = document.getElementById('bestGK') || document.getElementById('gk-leaderboard');
+  if (!el) return;
+
+  var allStats = cacheGet('pitchcwc_stats') || [];
+  // Only show players who have GK stats
+  var gks = allStats.filter(function(s) {
+    return (s.gkSaves || 0) > 0 || (s.gkCleanSheets || 0) > 0 || (s.gkMatches || 0) > 0;
+  });
+
+  if (!gks.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No goalkeeper stats recorded yet.</div>';
+    return;
+  }
+
+  // Calculate score and sort with tie-breakers
+  gks = gks.map(function(s) {
+    var score  = calcGKScore(s);
+    var mp     = s.gkMatches || 1;
+    var svPct  = (s.gkSaves || 0) + (s.gkGoalsConceded || 0) > 0
+               ? Math.round((s.gkSaves || 0) / ((s.gkSaves || 0) + (s.gkGoalsConceded || 0)) * 100) : 0;
+    var gapm   = mp > 0 ? ((s.gkGoalsConceded || 0) / mp) : 0;
+    return Object.assign({}, s, { _score: score, _svPct: svPct, _gapm: gapm, _mp: mp });
+  });
+
+  gks.sort(function(a, b) {
+    if (b._score !== a._score)   return b._score - a._score;
+    if ((b.gkCleanSheets||0) !== (a.gkCleanSheets||0)) return (b.gkCleanSheets||0) - (a.gkCleanSheets||0);
+    if (b._svPct !== a._svPct)   return b._svPct - a._svPct;
+    if (a._gapm  !== b._gapm)    return a._gapm  - b._gapm;
+    return (b.gkPenaltySaves||0) - (a.gkPenaltySaves||0);
+  });
+
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="border-bottom:2px solid rgba(201,162,39,.3)">'
+    + ['#','Goalkeeper','Team','MP','Saves','CS','GA','Pen Saves','Score'].map(function(h){
+        return '<th style="padding:8px 6px;text-align:'+(h==='#'||h==='Goalkeeper'||h==='Team'?'left':'center')+';color:var(--gold);font-family:\'Barlow Condensed\',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">'+h+'</th>';
+      }).join('')
+    + '</tr></thead><tbody>';
+
+  gks.forEach(function(s, i) {
+    var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    var bg    = i===0?'rgba(201,162,39,.08)':i%2===0?'rgba(255,255,255,.02)':'';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);background:'+bg+'">'
+      + '<td style="padding:10px 6px;font-size:16px;font-weight:900;color:'+(i<3?'var(--gold)':'var(--muted)')+'">'+medal+'</td>'
+      + '<td style="padding:10px 6px"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:700;color:var(--white)">'+(s.flag||'🏳️')+' '+s.name+'</div></td>'
+      + '<td style="padding:10px 6px;font-size:12px;color:var(--muted)">'+s.team+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:var(--text)">'+(s._mp)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:var(--text)">'+(s.gkSaves||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;font-weight:700;color:'+(s.gkCleanSheets?'#2ECC71':'var(--muted)')+'">'+  (s.gkCleanSheets||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:var(--text)">'+(s.gkGoalsConceded||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:var(--text)">'+(s.gkPenaltySaves||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center"><span style="font-family:\'Barlow Condensed\',sans-serif;font-size:22px;font-weight:900;color:var(--gold)">'+(s._score)+'</span></td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+// ── 4. PLAYER OF TOURNAMENT SCORE CALCULATOR ─────────────────
+function calcTournamentScore(s) {
+  var mp        = s.matches || s.matchesPlayed || 1;
+  var totRating = s.totalRating || 0;
+  var avgRating = mp > 0 ? totRating / mp : 0;
+  var goals     = s.goals   || 0;
+  var assists   = s.assists || 0;
+  var yellows   = s.yellowCards || 0;
+  var reds      = s.redCards    || 0;
+  var discipline = (yellows === 0 && reds === 0) ? 5 : -(yellows * 1) - (reds * 3);
+  return parseFloat(((avgRating * 0.70) + (goals * 0.15) + (assists * 0.10) + (discipline * 0.05)).toFixed(2));
+}
+
+// ── 5. PLAYER OF TOURNAMENT LEADERBOARD ──────────────────────
+function renderPOTLeaderboard() {
+  var el = document.getElementById('bestPlayers') || document.getElementById('pot-leaderboard');
+  if (!el) return;
+
+  var allStats = cacheGet('pitchcwc_stats') || [];
+  var players  = allStats.filter(function(s) {
+    return (s.matches || 0) > 0 || (s.goals || 0) > 0 || (s.totalRating || 0) > 0;
+  });
+
+  if (!players.length) {
+    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px">No player stats recorded yet.</div>';
+    return;
+  }
+
+  players = players.map(function(s) {
+    var mp     = s.matches || s.matchesPlayed || 1;
+    var avgR   = mp > 0 ? parseFloat(((s.totalRating || 0) / mp).toFixed(1)) : 0;
+    var score  = calcTournamentScore(s);
+    return Object.assign({}, s, { _mp: mp, _avgR: avgR, _score: score });
+  });
+
+  players.sort(function(a, b) {
+    if (b._score !== a._score)   return b._score - a._score;
+    if (b._avgR  !== a._avgR)    return b._avgR  - a._avgR;
+    if ((b.goals||0) !== (a.goals||0)) return (b.goals||0) - (a.goals||0);
+    if ((b.assists||0) !== (a.assists||0)) return (b.assists||0) - (a.assists||0);
+    return ((a.yellowCards||0)+(a.redCards||0)) - ((b.yellowCards||0)+(b.redCards||0));
+  });
+
+  var html = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">'
+    + '<thead><tr style="border-bottom:2px solid rgba(201,162,39,.3)">'
+    + ['#','Player','Team','Avg Rating','⚽','🅰️','🟨','🟥','Score'].map(function(h){
+        return '<th style="padding:8px 6px;text-align:'+(h==='#'||h==='Player'||h==='Team'?'left':'center')+';color:var(--gold);font-family:\'Barlow Condensed\',sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap">'+h+'</th>';
+      }).join('')
+    + '</tr></thead><tbody>';
+
+  players.forEach(function(s, i) {
+    var medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    var bg    = i===0?'rgba(201,162,39,.08)':i%2===0?'rgba(255,255,255,.02)':'';
+    var rColor = s._avgR >= 8 ? '#2ECC71' : s._avgR >= 6 ? 'var(--gold)' : 'var(--text)';
+    html += '<tr style="border-bottom:1px solid rgba(255,255,255,.05);background:'+bg+'">'
+      + '<td style="padding:10px 6px;font-size:16px;font-weight:900;color:'+(i<3?'var(--gold)':'var(--muted)')+'">'+medal+'</td>'
+      + '<td style="padding:10px 6px"><div style="font-family:\'Barlow Condensed\',sans-serif;font-size:15px;font-weight:700;color:var(--white)">'+(s.flag||'🏳️')+' '+s.name+'</div><div style="font-size:11px;color:var(--muted)">'+s._mp+' match'+(s._mp!==1?'es':'')+'</div></td>'
+      + '<td style="padding:10px 6px;font-size:12px;color:var(--muted)">'+s.team+'</td>'
+      + '<td style="padding:10px 6px;text-align:center"><span style="font-family:\'Barlow Condensed\',sans-serif;font-size:20px;font-weight:900;color:'+rColor+'">'+s._avgR+'</span></td>'
+      + '<td style="padding:10px 6px;text-align:center;font-weight:700;color:var(--white)">'+(s.goals||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:var(--text)">'+(s.assists||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:'+(s.yellowCards?'#F39C12':'var(--muted)')+'">'+  (s.yellowCards||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center;color:'+(s.redCards?'#E74C3C':'var(--muted)')+'">'+    (s.redCards||0)+'</td>'
+      + '<td style="padding:10px 6px;text-align:center"><span style="font-family:\'Barlow Condensed\',sans-serif;font-size:22px;font-weight:900;color:var(--gold)">'+s._score+'</span></td>'
+      + '</tr>';
+  });
+
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+}
+
+// ── 6. HOOK INTO showPage stats to render GK+POT ─────────────
+// Patch: after stats sync, also render GK and POT leaderboards
+var _origRenderStats = renderStats;
+renderStats = function() {
+  if (typeof _origRenderStats === 'function') _origRenderStats();
+  if (typeof renderGKLeaderboard  === 'function') renderGKLeaderboard();
+  if (typeof renderPOTLeaderboard === 'function') renderPOTLeaderboard();
+};
+
+// ── 7. HOOK INTO saveScore to auto-update goal stats ─────────
+// Wrap the existing saveScore to also call autoUpdateStatsFromMatch
+var _origSaveScore = saveScore;
+saveScore = async function() {
+  // Get match BEFORE saving so we can read scorers
+  var sel = document.getElementById('admin-match-sel');
+  var matches = cacheGet('pitchcwc_matches') || [];
+  await _origSaveScore.apply(this, arguments);
+  // After save, get updated match
+  if (sel) {
+    var m = matches.find(function(x){ return x.id === parseInt(sel.value); });
+    if (m && typeof autoUpdateStatsFromMatch === 'function') {
+      autoUpdateStatsFromMatch(m);
+    }
+  }
+};
+
+// ════════════════════════════════════════════════════════════════
+// END NEW FEATURES
+// ════════════════════════════════════════════════════════════════
 </script>
 </body>
-</html>
+</html
+        <!-- GK Leaderboard -->
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,.07)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🧤 Best Goalkeeper</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Score = (CS×5)+(Win×3)+(Draw×1)+(Saves÷3×2)+(PenSave×5)−GA</div>
+          <div id="gk-leaderboard"></div>
+        </div>
+
+        <!-- Player of Tournament -->
+        <div style="margin-top:32px;padding-top:24px;border-top:1px solid rgba(255,255,255,.07)">
+          <div style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;color:var(--gold);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">⭐ Player of the Tournament</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Score = (Avg Rating×70%)+(Goals×15%)+(Assists×10%)+(Discipline×5%)</div>
+          <div id="pot-leaderboard"></div>
+        </div>>
